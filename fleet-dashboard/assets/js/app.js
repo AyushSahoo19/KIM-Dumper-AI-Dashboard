@@ -187,9 +187,13 @@ function initApp() {
     });
   }
   
-  // 6. Try auto-ingest August 8 prototype CSV (best-effort, works when served via http)
+  // 6. Try auto-ingest August 8 prototype CSV — Vercel-safe (no-space path first) + legacy encoded fallback
   const tryAutoIngestAugust = async ()=>{
     const candidates = [
+      'data/august-8/RD20260808151024-HD785-7-N10706.csv',
+      '../data/august-8/RD20260808151024-HD785-7-N10706.csv',
+      '../../data/august-8/RD20260808151024-HD785-7-N10706.csv',
+      '/data/august-8/RD20260808151024-HD785-7-N10706.csv',
       '../../August%208%20data/RD20260808151024-HD785-7-N10706.csv',
       '../August%208%20data/RD20260808151024-HD785-7-N10706.csv',
       'August%208%20data/RD20260808151024-HD785-7-N10706.csv',
