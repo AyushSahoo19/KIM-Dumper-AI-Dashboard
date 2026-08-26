@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fleet Intelligence Dashboard</title>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+    <!-- TOP NAVIGATION -->
+    <header class="topbar">
+        <div class="brand">
+            <div class="brand-icon">F</div>
+            <div class="brand-text">
+                <h1>Fleet Intelligence</h1>
+                <p>100T Dumper Analytics</p>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <a href="index.html#analytics" style="background:#8b5cf6;color:#fff;padding:8px 14px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">🔬 Open Analytics Lab (Diesel vs Speed · RPM Dumping · Gradient-Retarder)</a>
+            <select id="view-select" class="select-box">
+                <option value="daily" selected>Daily Overview</option>
+                <option value="monthly">Monthly Trends</option>
+            </select>
+        </div>
+    </header>
+    <div style="background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;padding:10px 24px;text-align:center;font-size:13px">New: Full Analytics Lab is live in <a href="index.html" style="color:#fff;font-weight:700">HaulPro Fleet Command → Analytics Lab</a> — Diesel vs Speed heatmap, RPM per dumping status, and Gradient vs Retarder reports with actionable Ops/Maint insights. August 8 prototype CSV auto-loads when served via HTTP, or drag-drop it in Settings → Ingest.</div>
+
+    <!-- MAIN CONTENT -->
+    <main class="content">
+        
+        <!-- FLEET LEVEL METRICS -->
+        <section class="metrics-row">
+            <div class="metric-card mc-blue">
+                <div class="m-title">Active Fleet Size</div>
+                <div class="m-value"><span id="m-active">0</span><span class="m-unit">dumpers</span></div>
+            </div>
+            <div class="metric-card mc-orange">
+                <div class="m-title" id="m-title-payload">Avg Payload</div>
+                <div class="m-value"><span id="m-payload">0</span><span class="m-unit">tons</span></div>
+            </div>
+            <div class="metric-card mc-red">
+                <div class="m-title" id="m-title-fuel">Avg Fuel Rate</div>
+                <div class="m-value"><span id="m-fuel">0</span><span class="m-unit">L/h</span></div>
+            </div>
+        </section>
+
+        <!-- CHARTS AND ALERTS LAYOUT -->
+        <section class="grid grid-2-1">
+            
+            <!-- LEFT COLUMN: CHARTS -->
+            <div class="charts-column" style="display: flex; flex-direction: column; gap: 24px;">
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h3 class="card-title">Fleet Performance Comparison</h3>
+                            <p class="card-sub">Fuel Rate & Efficiency</p>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="chart-primary"></canvas>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h3 class="card-title">Fleet Health Diagnostics</h3>
+                            <p class="card-sub">Suspension & Mechanical Analytics</p>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="chart-secondary"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT COLUMN: INSIGHTS ENGINE -->
+            <div class="alerts-column">
+                <div class="card" style="height: 100%;">
+                    <div class="card-header">
+                        <div>
+                            <h3 class="card-title">AI Insights & Alerts</h3>
+                            <p class="card-sub">Auto-generated actionable steps for Operations & Maintenance</p>
+                        </div>
+                    </div>
+                    
+                    <div class="alert-list" id="alerts-list">
+                        <!-- Alerts injected via app.js -->
+                    </div>
+                </div>
+            </div>
+            
+        </section>
+        
+    </main>
+
+    <!-- SCRIPTS -->
+    <!-- Load data simulator first, then logic -->
+    <script src="js/fleet_data_simulator.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

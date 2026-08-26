@@ -1,0 +1,9 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+Output_*/
+Reports/
+*.log
+.DS_Store
+Thumbs.db

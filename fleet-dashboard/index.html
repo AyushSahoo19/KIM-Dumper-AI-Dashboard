@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HaulPro Fleet Command — HD785-7 Fleet Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+
+<!-- ══════════ SIDEBAR ══════════ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <div class="logo">HP</div>
+    <div>
+      <div class="brand-text">HaulPro<br>Fleet Command</div>
+      <div class="brand-sub">HD785-7 · KIM Mines</div>
+    </div>
+    <button class="sidebar-toggle" id="sidebar-collapse" title="Collapse sidebar">‹</button>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-label">Monitoring</div>
+    <a href="#" data-section="command" class="active"><span class="icon">🛰️</span> Command Center</a>
+    <a href="#" data-section="dumper"><span class="icon">🚛</span> Dumper 360</a>
+    <a href="#" data-section="compare"><span class="icon">⚖️</span> Fleet Comparison</a>
+    <div class="nav-label">Intelligence</div>
+    <a href="#" data-section="analytics"><span class="icon">🔬</span> Analytics Lab <span class="nav-badge" style="background:#8b5cf6;display:inline-block">NEW</span></a>
+    <a href="#" data-section="gmap"><span class="icon">🗺️</span> Google Map Track <span class="nav-badge" style="background:#10b981;display:inline-block">LIVE</span></a>
+    <a href="#" data-section="alerts"><span class="icon">🚨</span> Alerts &amp; Actions <span class="nav-badge" id="nav-alert-badge">0</span></a>
+    <a href="#" data-section="monthly"><span class="icon">📅</span> Monthly Reports</a>
+    <a href="#" data-section="undulation"><span class="icon">🛣️</span> Undulation Monitor</a>
+    <div class="nav-label">System</div>
+    <a href="#" data-section="settings"><span class="icon">⚙️</span> Settings &amp; Data</a>
+  </nav>
+  <div class="sidebar-footer">
+    Haul Road Undulation &amp; Dumper Intelligence<br>Kalinga Iron Mine · Prototype v1.0
+  </div>
+  <div class="sidebar-resizer" id="sidebar-resizer" title="Drag to resize sidebar"></div>
+</aside>
+
+<!-- ══════════ MAIN ══════════ -->
+<div class="main">
+  <header class="topbar">
+    <div class="topbar-left">
+      <button class="hamburger" id="hamburger">☰</button>
+      <h1 id="page-title">Command Center</h1>
+      <span class="live-dot" title="Demo data engine active"></span>
+    </div>
+    <div class="topbar-actions">
+      <label class="date-label">Report date</label>
+      <select id="global-year" class="input select-sm"></select>
+      <select id="global-month" class="input select-sm"></select>
+      <select id="global-day" class="input select-sm"></select>
+      <select id="global-dumper" class="input select-sm"><option value="">All Dumpers</option></select>
+      <button class="btn btn-primary" id="btn-refresh">↻ Refresh</button>
+    </div>
+  </header>
+
+  <main class="content">
+
+    <!-- ─── COMMAND CENTER ─── -->
+    <section id="sec-command" class="section active">
+      <div class="kpis" id="cmd-kpis"></div>
+      <div class="grid grid-2-1">
+        <div class="card">
+          <h3>Fleet Health Matrix</h3>
+          <p class="sub">Module scores 0–100 per dumper · click a cell to open Dumper 360</p>
+          <div id="cmd-matrix" class="matrix"></div>
+          <div class="legend-row" id="cmd-matrix-legend"></div>
+        </div>
+        <div class="card">
+          <h3>Today's Top Insights</h3>
+          <p class="sub">Auto-generated from the alert engine</p>
+          <div id="cmd-insights" class="insights-list"></div>
+        </div>
+      </div>
+      <div class="grid grid-4">
+        <div class="card"><h3>Alert Severity Mix</h3><p class="sub">Selected date, whole fleet</p><div class="chart-wrap sm"><canvas id="ch-sev-donut"></canvas></div></div>
+        <div class="card"><h3>Worst Deviations Today</h3><p class="sub">Top dumper–parameter z-scores vs own baseline</p><div class="chart-wrap sm"><canvas id="ch-dev-bar"></canvas></div></div>
+        <div class="card"><h3>Fleet Composite Ranking</h3><p class="sub">Weighted module score, selected date</p><div class="chart-wrap sm"><canvas id="ch-rank-bar"></canvas></div></div>
+        <div class="card"><h3>14-Day Alert Trend</h3><p class="sub">Critical + warning alerts per day</p><div class="chart-wrap sm"><canvas id="ch-alert-trend"></canvas></div></div>
+      </div>
+    </section>
+
+    <!-- ─── DUMPER 360 ─── -->
+    <section id="sec-dumper" class="section">
+      <div class="view-controls">
+        <select id="d360-select" class="input"></select>
+        <div class="day-nav">
+          <button class="btn btn-icon" id="d360-prev">◀</button>
+          <input type="date" id="d360-date" class="input date-input">
+          <button class="btn btn-icon" id="d360-next">▶</button>
+        </div>
+        <span id="d360-grade-banner" class="grade-banner"></span>
+      </div>
+      <div id="d360-body"></div>
+    </section>
+
+    <!-- ─── FLEET COMPARISON ─── -->
+    <section id="sec-compare" class="section">
+      <div class="view-controls">
+        <select id="cmp-param" class="input"></select>
+        <select id="cmp-radar-a" class="input select-sm"></select>
+        <select id="cmp-radar-b" class="input select-sm"></select>
+        <select id="cmp-scatter-x" class="input select-sm"></select>
+        <select id="cmp-scatter-y" class="input select-sm"></select>
+      </div>
+      <div class="grid grid-2">
+        <div class="card"><h3>Daily Ranking — <span id="cmp-param-title"></span></h3><p class="sub">All dumpers on selected date · median line · status colored</p><div class="chart-wrap tall"><canvas id="ch-cmp-rank"></canvas></div></div>
+        <div class="card"><h3>Distribution &amp; Outliers</h3><p class="sub">Dot plot with median / IQR · outliers flagged by peer z-score</p><div class="chart-wrap tall"><canvas id="ch-cmp-dist"></canvas></div></div>
+      </div>
+      <div class="grid grid-2">
+        <div class="card"><h3>Scatter Explorer</h3><p class="sub">Pick X / Y parameters · bubble size = trips that day</p><div class="chart-wrap tall"><canvas id="ch-cmp-scatter"></canvas></div></div>
+        <div class="card"><h3>Module Radar Overlay</h3><p class="sub">Up to 4 dumpers · normalized module scores (30-day avg)</p><div class="chart-wrap tall"><canvas id="ch-cmp-radar"></canvas></div></div>
+      </div>
+      <div class="card">
+        <h3>Comparison Table</h3>
+        <p class="sub">Value · Δ vs own 14-day baseline · peer z-score · status</p>
+        <div class="table-scroll"><table class="data-table" id="cmp-table"></table></div>
+      </div>
+    </section>
+
+    <!-- ─── ALERTS & ACTIONS ─── -->
+    <section id="sec-alerts" class="section">
+      <div class="view-controls wrap" id="al-filters">
+        <div class="seg" id="al-sev">
+          <button data-v="critical" class="on">Critical</button>
+          <button data-v="warning" class="on">Warning</button>
+          <button data-v="info" class="on">Info</button>
+        </div>
+        <select id="al-dumper" class="input select-sm"></select>
+        <select id="al-module" class="input select-sm"></select>
+        <select id="al-status" class="input select-sm">
+          <option value="">All statuses</option><option value="open">Open</option>
+          <option value="ack">Acknowledged</option><option value="resolved">Resolved</option>
+        </select>
+        <input type="date" id="al-from" class="input date-input" title="From">
+        <input type="date" id="al-to" class="input date-input" title="To">
+        <button class="btn" id="al-export">⬇ Export CSV</button>
+        <button class="btn" id="al-ackall">✓ Ack all shown</button>
+      </div>
+      <div class="alert-stats" id="al-stats"></div>
+      <div id="al-list" class="alert-list"></div>
+    </section>
+
+    <!-- ─── MONTHLY REPORTS ─── -->
+    <section id="sec-monthly" class="section">
+      <div class="view-controls">
+        <select id="mo-month" class="input"></select>
+        <button class="btn" id="mo-print">🖨 Print Report</button>
+      </div>
+      <div id="mo-body"></div>
+    </section>
+
+    <!-- ─── ANALYTICS LAB — one chart per section, fully expanded ─── -->
+    <section id="sec-analytics" class="section">
+      <div class="view-controls">
+        <select id="an-dumper" class="input"></select>
+        <button class="btn btn-primary" id="an-analyse">🔬 Re-analyse</button>
+        <span id="an-meta" style="color:var(--text-sec);font-size:12px;margin-left:8px"></span>
+      </div>
+
+      <!-- Insights Banner — full width -->
+      <div id="an-insights" class="card" style="margin-bottom:28px;border-left:4px solid #f59e0b;background:rgba(245,158,11,0.06)"></div>
+
+      <!-- 1 · Heat Map — full width expanded -->
+      <div class="card" style="margin-bottom:28px; padding:24px 28px;">
+        <h3>1 · Diesel Consumption vs Speed — Heat Map</h3>
+        <p class="sub">Fuel Rate (actual L/h = raw/10) binned vs GPS Speed (km/h) · colour = point density · tooltip = n & avg fuel · red outline = high-burn anomaly</p>
+        <div id="an-heatmap" class="heatmap-wrap"></div>
+        <div id="an-heatmap-legend" class="legend-row" style="margin-top:14px"></div>
+        <div id="an-heatmap-stats" style="margin-top:14px; font-size:13px; color:var(--text-sec); padding-top:14px; border-top:1px dashed rgba(255,255,255,0.08)"></div>
+      </div>
+
+      <!-- 1b · Route Heatmap — Lat/Long path coloured by diesel & speed — full width expanded -->
+      <div class="card" style="margin-bottom:28px; padding:24px 28px;">
+        <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; margin-bottom:4px">
+          <div>
+            <h3>1b · Diesel & Speed — Route Heatmap (Lat/Long Path)</h3>
+            <p class="sub" style="margin-bottom:0">GPS path coloured by Fuel Rate (actual L/h) · dot size = speed · hover for fuel/speed/gradient at that location</p>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+            <label style="font-size:12px; color:var(--text-sec);">View</label>
+            <select id="an-route-mode" class="input select-sm"><option value="fuel" selected>Fuel Rate</option><option value="speed">Speed</option><option value="both">Fuel+Speed</option><option value="dumpRpm">Dumping RPM (green ≤700 / red >700)</option><option value="dumpAbove">Dumping >700 only</option><option value="dumpBelow">Dumping ≤700 only</option></select>
+            <button class="btn btn-primary" id="an-route-fit" style="padding:6px 10px; font-size:12px;">◎ Fit to path</button>
+          </div>
+        </div>
+        <div id="an-route-map" style="position:relative; width:100%; height:520px; background:#0b1220; border:1px solid var(--card-border); border-radius:12px; overflow:hidden; margin-top:12px">
+          <canvas id="an-route-canvas" style="position:absolute; inset:0; width:100%; height:100%; display:block;"></canvas>
+          <div id="an-route-tooltip" style="position:absolute; pointer-events:none; background:#0f172a; color:#f8fafc; border:1px solid #334155; border-radius:8px; padding:8px 10px; font-size:12px; line-height:1.4; display:none; max-width:260px; box-shadow:0 8px 24px rgba(0,0,0,0.45); z-index:2"></div>
+          <div id="an-route-empty" style="position:absolute; inset:0; display:none; align-items:center; justify-content:center; color:var(--text-sec); font-size:13px; background:rgba(11,18,32,0.92)">No GPS points with valid Lat/Long for this date/dumper.</div>
+        </div>
+        <div id="an-route-legend" class="legend-row" style="margin-top:12px; justify-content:flex-start; flex-wrap:wrap; gap:10px"></div>
+        <div id="an-route-stats" style="margin-top:10px; font-size:12px; color:var(--text-sec); padding-top:12px; border-top:1px dashed rgba(255,255,255,0.08)"></div>
+      </div>
+
+      <!-- 2 · RPM — full width expanded -->
+      <div class="card" style="margin-bottom:28px; padding:24px 28px;">
+        <h3>2 · RPM Report — Per Dumping Status</h3>
+        <p class="sub">Eng_Speed distribution grouped by Vehicle_State (1,2,3,4,5,6) + Hoist lever · highlights out-of-spec RPM during dump (spec 650–1900 RPM)</p>
+        <div class="chart-wrap" style="height:520px; min-height:520px; max-height:none; flex:none;"><canvas id="ch-an-rpm"></canvas></div>
+        <div class="table-scroll" style="margin-top:18px; max-height:260px;"><table class="data-table" id="an-rpm-table"></table></div>
+      </div>
+
+      <!-- 2b · Dumping RPM per Cycle — Timeline (700 RPM threshold) -->
+      <div class="card" style="margin-bottom:28px; padding:24px 28px;">
+        <h3>2b · Dumping RPM per Cycle — Timeline (700 RPM threshold)</h3>
+        <p class="sub">Per dumping cycle (Hoist &gt;0) — RPM vs dumping time · <span style="color:#10b981; font-weight:700">green ≤700 RPM (OK)</span> · <span style="color:#ef4444; font-weight:700">red &gt;700 RPM (above spec)</span> · vertical dividers = cycle boundaries · hover for time, lat/long, fuel</p>
+        <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:10px">
+          <span id="dump-cycle-summary" style="font-size:12px; color:var(--text-sec)"></span>
+          <span style="margin-left:auto; display:flex; gap:10px; align-items:center; font-size:11px; color:var(--text-sec)"><span style="width:12px; height:12px; background:#10b981; border-radius:2px; display:inline-block"></span> ≤700 <span style="width:12px; height:12px; background:#ef4444; border-radius:2px; display:inline-block; margin-left:6px"></span> >700 <span style="width:24px; height:3px; background:#f59e0b; display:inline-block; margin-left:6px"></span> 700 line</span>
+        </div>
+        <div class="chart-wrap" style="height:520px; min-height:520px; max-height:none; flex:none;"><canvas id="ch-an-dump-cycle"></canvas></div>
+        <div class="table-scroll" style="margin-top:18px; max-height:260px;"><table class="data-table" id="an-dump-cycle-table"></table></div>
+        <div id="an-dump-cycle-map" style="margin-top:18px; position:relative; width:100%; height:360px; background:#0b1220; border:1px solid var(--card-border); border-radius:12px; overflow:hidden; display:none">
+          <canvas id="an-dump-cycle-map-canvas" style="position:absolute; inset:0; width:100%; height:100%; display:block"></canvas>
+          <div id="an-dump-cycle-map-empty" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--text-sec); font-size:12px; background:rgba(11,18,32,0.92)">No dumping cycles with GPS.</div>
+        </div>
+        <div id="an-dump-cycle-insights" style="margin-top:16px"></div>
+      </div>
+
+      <!-- 2c · Location-wise Dumping RPM — same-location comparison -->
+      <div class="card" style="margin-bottom:28px; padding:24px 28px;">
+        <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between">
+          <div>
+            <h3>2c · Location-wise Dumping RPM — Same-Location Comparison</h3>
+            <p class="sub" style="margin-bottom:0">~30m grid clusters (~0.0003° ≈ 33m) — compare RPM at the *same* dump location across cycles. Green ≤700 / Red >700.</p>
+          </div>
+          <span id="loc-dump-summary" style="font-size:12px; color:var(--text-sec)"></span>
+        </div>
+        <div class="chart-wrap" style="height:520px; min-height:520px; max-height:none; flex:none; margin-top:12px"><canvas id="ch-an-loc-dump"></canvas></div>
+        <div class="table-scroll" style="margin-top:18px; max-height:280px;"><table class="data-table" id="an-loc-dump-table"></table></div>
+        <div style="margin-top:22px; padding-top:16px; border-top:1px dashed rgba(255,255,255,0.08)">
+          <h4 style="font-size:13px; font-weight:600; margin-bottom:4px">Location × Time — RPM Time-Wise</h4>
+          <p class="sub" style="margin-bottom:12px">X = Time (dump sequence, 1Hz), Y = RPM — each point is a dumping sample at a location (lat,lon) · colour = location cluster · size = fuel</p>
+          <div class="chart-wrap" style="height:480px; min-height:480px; max-height:none; flex:none;"><canvas id="ch-an-loc-dump-time"></canvas></div>
+          <div class="table-scroll" style="margin-top:16px; max-height:240px;"><table class="data-table" id="an-loc-dump-time-table"></table></div>
+        </div>
+        <div id="an-loc-dump-insights" style="margin-top:16px"></div>
+        <div style="margin-top:10px; font-size:11px; color:var(--text-muted)">Tip: Clusters with high variance or high % >700 indicate location-specific over-rev pattern (e.g., uneven ground forcing throttle). Use Google Map dumping filter to locate them.</div>
+      </div>
+
+      <!-- 3a · Gradient vs Retarder — Scatter full width -->
+      <div class="card" style="margin-bottom:28px; padding:24px 28px;">
+        <h3>3a · Gradient vs Retarder Position — Scatter</h3>
+        <p class="sub">Each point = retarder event · X = Gradient (°) negative = downhill · Y = Retarder Position · colour = speed (red &lt;5 km/h, amber 5-12, green &gt;12)</p>
+        <div class="chart-wrap" style="height:520px; min-height:520px; max-height:none; flex:none;"><canvas id="ch-an-grad-scatter"></canvas></div>
+      </div>
+
+      <!-- 3b · Gradient vs Retarder — Bar full width -->
+      <div class="card" style="margin-bottom:28px; padding:24px 28px;">
+        <h3>3b · Retarder Usage by Gradient Band — Bar</h3>
+        <p class="sub">% of time retarder &gt;10 active within each gradient band · red = under-use on downhill (&lt;60% on &lt;-5°)</p>
+        <div class="chart-wrap" style="height:380px; min-height:380px; max-height:none; flex:none;"><canvas id="ch-an-grad-bar"></canvas></div>
+      </div>
+
+      <!-- 3c · Gradient-Retarder Details — full width table -->
+      <div class="card" style="margin-bottom:28px; padding:24px 28px;">
+        <h3>3c · Gradient-Retarder Details & Anomalies</h3>
+        <p class="sub">Quantified table per gradient band + flagged downhill-no-retarder segments driving brake risk</p>
+        <div class="table-scroll"><table class="data-table" id="an-grad-table"></table></div>
+        <div id="an-grad-anomaly" style="margin-top:18px"></div>
+      </div>
+
+      <div class="card" style="padding:24px 28px;">
+        <h3>How to read this lab</h3>
+        <p class="sub">Provenance: raw August 8 CSV (45-col telemetry) → binned aggregates. Thresholds from OEM &amp; mine practice.</p>
+        <ul style="font-size:12px;color:var(--text-sec);line-height:1.8;margin-top:10px;padding-left:18px">
+          <li><b>Heatmap</b>: High fuel (&gt;90 L/h actual) at low speed (&lt;5 km/h) = idling waste / injector dribble. High fuel at 15-20 km/h on flat = overload or road drag.</li>
+          <li><b>RPM Dumping</b>: HD785-7 dumping RPM spec 650–1900; sustained &gt;1950 during hoist = over-rev / operator throttle abuse; &lt;600 = lug / stall risk.</li>
+          <li><b>Gradient-Retarder</b>: On grades &lt; -5° retarder must be active &gt;60% of time; &lt;30% = foot-brake riding → overheating &amp; fade.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ─── GOOGLE MAP TRACK — live GIS with Google tiles ─── -->
+    <section id="sec-gmap" class="section">
+      <div class="view-controls" style="flex-wrap:wrap; gap:12px">
+        <select id="gm-dumper" class="input"></select>
+                <select id="gm-mode" class="input select-sm"><option value="fuel" selected>Colour by Fuel</option><option value="speed">Colour by Speed</option><option value="dumpRpm">Dumping RPM</option><option value="dumpAbove">Dumping >700 only</option><option value="dumpBelow">Dumping ≤700 only</option></select>
+        <select id="gm-basemap" class="input select-sm"><option value="roadmap" selected>Roadmap</option><option value="satellite">Satellite</option><option value="hybrid">Hybrid</option><option value="terrain">Terrain</option></select>
+        <button class="btn" id="gm-fit">◎ Fit to path</button>
+        <button class="btn" id="gm-play">▶ Play trace</button>
+        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-sec)"><input type="checkbox" id="gm-heat" checked> Heat dots</label>
+        <div style="display:flex; gap:8px; align-items:center; margin-left:8px; border-left:1px solid var(--card-border); padding-left:12px">
+          <button class="btn" id="gm-earth-toggle" style="background:linear-gradient(135deg,#0ea5e9,#6366f1); color:#fff; border:none">🌍 Earth 3D</button>
+          <button class="btn" id="gm-kml">⬇ KML for Earth Pro</button>
+        </div>
+        <span id="gm-meta" style="color:var(--text-sec); font-size:12px; margin-left:8px"></span>
+      </div>
+      <div class="card" style="padding:0; overflow:hidden;">
+        <div id="gmap" style="width:100%; height:620px; background:#0b1220;"></div>
+        <iframe id="earth-frame" style="width:100%; height:620px; border:0; display:none; background:#000" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allow="fullscreen"></iframe>
+        <div id="earth-fallback" style="display:none; width:100%; height:620px; background:#020617; color:var(--text-sec); align-items:center; justify-content:center; text-align:center; padding:32px; font-size:13px; line-height:1.6">
+          <div><b style="color:var(--text)">Google Earth Web requires internet.</b><br>Your KML has been downloaded — double-click to open in <b>Google Earth Pro Desktop</b> for full 3D terrain.<br><br><span style="font-size:11px; color:var(--text-muted)">Tip: In Earth Pro, enable <code>Terrain → 3D</code> and tilt with middle-mouse for haul road profile.</span></div>
+        </div>
+      </div>
+      <div class="grid grid-2" style="margin-top:20px">
+        <div class="card">
+          <h3>Route Legend</h3>
+          <p class="sub">Google tiles (no API key via mt*.google.com) · path segments coloured by fuel/speed · S=start E=end</p>
+          <div id="gm-legend" class="legend-row" style="justify-content:flex-start; flex-wrap:wrap; gap:10px"></div>
+          <div id="gm-stats" style="margin-top:12px; font-size:12px; color:var(--text-sec)"></div>
+        </div>
+        <div class="card">
+          <h3>Google Maps Notes</h3>
+          <p class="sub">If you have a Google Maps API key, set it in the console via localStorage.setItem('haulp_gmap_key','YOUR_KEY') and reload to use official Google JS API.</p>
+          <div style="font-size:12px; color:var(--text-sec); line-height:1.6">
+            <div>Current tile source: <span id="gm-tile-info" style="color:var(--text)"></span></div>
+            <div style="margin-top:8px">August 8 path: <code>August 8 data/RD20260808151024-HD785-7-N10706.csv</code> — 3102 rows, GPS from <code>N2156.4xxx E08523.0xxx</code>. Synthetic fallback uses mine corridor <code>21.9386,85.3786 → 21.9534,85.3875</code> if no ingest.</div>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:20px; border-left:4px solid #10b981; background:linear-gradient(180deg, rgba(16,185,129,0.07), rgba(0,0,0,0))">
+        <h3>🌍 Google Earth Pro — 3D & KML</h3>
+        <p class="sub">Use Earth Pro desktop for true 3D terrain, tilt and timeline. No key needed for downloaded KML.</p>
+        <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:12px">
+          <button class="btn btn-primary" id="gm-earth-open" style="background:#0ea5e9; border-color:#0ea5e9">↗ Open in earth.google.com</button>
+          <button class="btn" id="gm-kml2">⬇ Download KML</button>
+          <span style="font-size:11px; color:var(--text-muted); align-self:center">KML contains 3D LineString + fuel-coloured hotspots; double-click in Earth Pro to fly to haul road.</span>
+        </div>
+        <div style="font-size:11px; color:var(--text-sec); margin-top:10px; line-height:1.6">Earth 3D iframe uses <code>earth.google.com/web/@lat,lon,alt...a,35y,0h,60t</code> at your path centre. If iframe is blocked by Google X-Frame (shows blank), use the KML — it opens natively in <b>Google Earth Pro Desktop</b> with full terrain exaggeration and 3D build.</div>
+      </div>
+    </section>
+
+    <!-- ─── UNDULATION MONITOR ─── -->
+    <section id="sec-undulation" class="section">
+      <div class="view-controls">
+        <select id="un-dumper" class="input"></select>
+        <label class="ctl-label">Green ≥ <input type="number" id="un-th-green" class="input num-xs" step="0.1"> kPa</label>
+        <label class="ctl-label">Red ≥ <input type="number" id="un-th-red" class="input num-xs" step="0.1"> kPa</label>
+        <button class="btn" id="un-kml-note">ℹ KML workflow</button>
+      </div>
+      <div class="grid grid-2">
+        <div class="card"><h3>Track Map — <span id="un-map-title"></span></h3><p class="sub">Haul corridor colored by |Rack|/|Bias| intensity · red spots labeled</p><div id="un-map" class="trackmap"></div></div>
+        <div class="card"><h3>Daily Point Quality Trend</h3><p class="sub">Blue / green / red segment counts per survey day</p><div class="chart-wrap tall"><canvas id="ch-un-trend"></canvas></div></div>
+      </div>
+      <div class="card">
+        <h3>Recurring Hotspots</h3>
+        <p class="sub">Clustered across all days &amp; dumpers (~30 m grid) · ranked by frequency and intensity</p>
+        <div class="table-scroll"><table class="data-table" id="un-hotspots"></table></div>
+      </div>
+    </section>
+
+    <!-- ─── SETTINGS & DATA ─── -->
+    <section id="sec-settings" class="section">
+      <div class="grid grid-2">
+        <div class="card">
+          <h3>Dumper Registry</h3>
+          <p class="sub">Fleet roster — feeds every view · persisted locally</p>
+          <div class="table-scroll"><table class="data-table" id="st-registry"></table></div>
+          <div class="row-actions">
+            <input type="text" id="st-new-id" class="input" placeholder="Unit no. e.g. 41" style="width:140px">
+            <button class="btn" id="st-add-dumper">+ Add dumper</button>
+            <button class="btn btn-danger" id="st-reset">Reset demo data</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Alert Engine Settings</h3>
+          <p class="sub">Baseline window, z-score gates, peer sensitivity</p>
+          <div id="st-engine" class="engine-settings"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Threshold Editor</h3>
+        <p class="sub">Absolute warning / critical limits per parameter (direction-aware) · saved locally</p>
+        <div class="table-scroll"><table class="data-table" id="st-thresholds"></table></div>
+      </div>
+      <div class="card">
+        <h3>Ingest Raw Dumper CSV</h3>
+        <p class="sub">Drop the weekly raw files (45-col format: Time, Eng_Speed, Fuel_Rate_01L … Rack, Bias, GPS_*). They are aggregated into daily metrics and merged into the store. Filename pattern <code>RD*-HD785-7-N107XX.csv</code> auto-maps serial → unit.</p>
+        <div class="upload-zone" id="st-upload">
+          <div class="upload-icon">📥</div>
+          <h3>Drop CSV files or click to browse</h3>
+          <p>Raw dumper telemetry · one file per dumper-day session</p>
+          <input type="file" id="st-file" multiple accept=".csv">
+        </div>
+        <div id="st-ingest-log" class="ingest-log"></div>
+        <div class="row-actions">
+          <button class="btn" id="st-export-snap">⬇ Export snapshot JSON</button>
+          <label class="btn" style="position:relative">⬆ Import snapshot<input type="file" id="st-import" accept=".json" style="position:absolute;inset:0;opacity:0;cursor:pointer"></label>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div id="toast-wrap" class="toast-wrap"></div>
+<div id="loader" class="loader hidden"><div class="spinner"></div><div>Crunching fleet data…</div></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/engine.js"></script>
+<script src="assets/js/views.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
