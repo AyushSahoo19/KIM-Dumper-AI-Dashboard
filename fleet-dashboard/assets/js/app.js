@@ -93,35 +93,78 @@ function initApp() {
     });
   });
 
-  // 4b. Sidebar collapsible + resizable
+  // 4b. Sidebar — fully collapsible (0), collapsed (72px), expanded (260px) + mobile overlay + resizable + window view
   (function(){
     const sidebar = document.getElementById('sidebar');
     const collapseBtn = document.getElementById('sidebar-collapse');
     const hamburger = document.getElementById('hamburger');
     const resizer = document.getElementById('sidebar-resizer');
+    const overlay = document.getElementById('sidebar-overlay');
+    const fab = document.getElementById('sidebar-fab');
     const LS_KEY_W = 'haulp_sidebar_w';
-    const LS_KEY_C = 'haulp_sidebar_collapsed';
+    const LS_KEY_C = 'haulp_sidebar_state'; // 0=expanded, 1=collapsed, 2=hidden
+    const isMobile = ()=> window.innerWidth <= 768;
     // restore
     try{
       const savedW = localStorage.getItem(LS_KEY_W);
       if(savedW){ const w = parseInt(savedW,10); if(w>=160 && w<=420){ sidebar.style.width = w+'px'; } }
-      if(localStorage.getItem(LS_KEY_C)==='1'){ sidebar.classList.add('collapsed'); if(collapseBtn) collapseBtn.textContent='›'; }
+      const savedS = localStorage.getItem(LS_KEY_C);
+      if(savedS==='1'){ sidebar.classList.add('collapsed'); if(collapseBtn) collapseBtn.textContent='›'; }
+      else if(savedS==='2'){ sidebar.classList.add('hidden'); document.body.classList.add('sidebar-hidden'); if(collapseBtn) collapseBtn.textContent='‹'; }
     }catch(e){}
-    function toggleCollapse(){
-      sidebar.classList.toggle('collapsed');
-      const isCollapsed = sidebar.classList.contains('collapsed');
-      if(collapseBtn) collapseBtn.textContent = isCollapsed ? '›' : '‹';
-      try{ localStorage.setItem(LS_KEY_C, isCollapsed?'1':'0'); }catch(e){}
-      // trigger chart resize after transition
-      setTimeout(()=>{ window.dispatchEvent(new Event('resize')); Object.values(window.CHARTS||{}).forEach(c=>{ try{c.resize();}catch(e){}}); }, 300);
+    function updateFab(){
+      const hidden = sidebar.classList.contains('hidden');
+      if(fab) fab.style.display = hidden ? 'inline-flex' : 'none';
+      document.body.classList.toggle('sidebar-hidden', hidden);
     }
-    if(collapseBtn) collapseBtn.addEventListener('click', toggleCollapse);
+    updateFab();
+    function setState(state){ // 0 expanded, 1 collapsed, 2 hidden
+      sidebar.classList.remove('collapsed','hidden','mobile-open');
+      if(overlay) overlay.classList.remove('active');
+      if(state===1){ sidebar.classList.add('collapsed'); if(collapseBtn) collapseBtn.textContent='›'; }
+      else if(state===2){ sidebar.classList.add('hidden'); if(collapseBtn) collapseBtn.textContent='‹'; }
+      else { if(collapseBtn) collapseBtn.textContent='‹'; }
+      try{ localStorage.setItem(LS_KEY_C, String(state)); }catch(e){}
+      updateFab();
+      setTimeout(()=>{ window.dispatchEvent(new Event('resize')); Object.values(window.CHARTS||{}).forEach(c=>{ try{c.resize();}catch(e){}}); }, 320);
+    }
+    function getState(){ if(sidebar.classList.contains('hidden')) return 2; if(sidebar.classList.contains('collapsed')) return 1; return 0; }
+    function toggleCollapse(e){
+      if(e && e.shiftKey){ // Shift+click → fully hidden (window view)
+        setState(getState()===2 ? 0 : 2); return;
+      }
+      if(isMobile()){
+        const open = sidebar.classList.contains('mobile-open');
+        if(open){ sidebar.classList.remove('mobile-open'); if(overlay) overlay.classList.remove('active'); }
+        else { sidebar.classList.add('mobile-open'); if(overlay) overlay.classList.add('active'); }
+        return;
+      }
+      // desktop window view: cycle expanded → collapsed → hidden → expanded
+      const s = getState();
+      if(s===0) setState(1);
+      else if(s===1) setState(2);
+      else setState(0);
+    }
+    function showSidebar(){
+      if(isMobile()){
+        sidebar.classList.add('mobile-open'); if(overlay) overlay.classList.add('active');
+      } else {
+        setState(0);
+      }
+    }
+    if(collapseBtn){
+      collapseBtn.addEventListener('click', toggleCollapse);
+      collapseBtn.addEventListener('dblclick', (e)=>{ e.preventDefault(); setState(getState()===2?0:2); });
+      collapseBtn.title = 'Click: collapse (72px) · Shift+Click or Double-click: hide fully (0) · Ctrl+B';
+    }
     if(hamburger) hamburger.addEventListener('click', toggleCollapse);
-    // draggable resizer
+    if(overlay) overlay.addEventListener('click', ()=>{ sidebar.classList.remove('mobile-open'); overlay.classList.remove('active'); });
+    if(fab) fab.addEventListener('click', showSidebar);
+    // draggable resizer (desktop only)
     if(resizer){
       let dragging=false, startX=0, startW=0;
       resizer.addEventListener('mousedown', (e)=>{
-        if(sidebar.classList.contains('collapsed')) return;
+        if(sidebar.classList.contains('collapsed') || sidebar.classList.contains('hidden') || isMobile()) return;
         dragging=true; startX=e.clientX; startW=sidebar.getBoundingClientRect().width;
         document.body.style.cursor='ew-resize'; document.body.style.userSelect='none';
         e.preventDefault();
@@ -139,9 +182,46 @@ function initApp() {
         try{ localStorage.setItem(LS_KEY_W, String(Math.round(sidebar.getBoundingClientRect().width))); }catch(e){}
         Object.values(window.CHARTS||{}).forEach(c=>{ try{c.resize();}catch(e){}});
       });
+      // touch for mobile/tablet
+      resizer.addEventListener('touchstart', (e)=>{
+        if(sidebar.classList.contains('collapsed') || sidebar.classList.contains('hidden') || isMobile()) return;
+        dragging=true; startX=e.touches[0].clientX; startW=sidebar.getBoundingClientRect().width;
+        e.preventDefault();
+      }, {passive:false});
+      window.addEventListener('touchmove', (e)=>{
+        if(!dragging) return;
+        let newW = startW + (e.touches[0].clientX - startX);
+        newW = Math.max(160, Math.min(420, newW));
+        sidebar.style.width = newW+'px';
+        window.dispatchEvent(new Event('resize'));
+      }, {passive:false});
+      window.addEventListener('touchend', ()=>{
+        if(!dragging) return;
+        dragging=false;
+        try{ localStorage.setItem(LS_KEY_W, String(Math.round(sidebar.getBoundingClientRect().width))); }catch(e){}
+        Object.values(window.CHARTS||{}).forEach(c=>{ try{c.resize();}catch(e){}});
+      });
     }
-    // keyboard shortcut: Ctrl+B
-    window.addEventListener('keydown', (e)=>{ if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='b'){ e.preventDefault(); toggleCollapse(); }});
+    // close mobile drawer on nav click
+    document.querySelectorAll('.sidebar-nav a').forEach(a=>{
+      a.addEventListener('click', ()=>{
+        if(isMobile()){ sidebar.classList.remove('mobile-open'); if(overlay) overlay.classList.remove('active'); }
+      });
+    });
+    // handle resize: if switching to mobile, clear hidden/collapsed inline width
+    window.addEventListener('resize', ()=>{
+      updateFab();
+      if(!isMobile()){
+        if(overlay) overlay.classList.remove('active');
+        sidebar.classList.remove('mobile-open');
+      }
+      Object.values(window.CHARTS||{}).forEach(c=>{ try{c.resize();}catch(e){}});
+    });
+    // keyboard shortcut: Ctrl+B → cycle collapsed/hidden
+    window.addEventListener('keydown', (e)=>{ if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='b'){ e.preventDefault(); toggleCollapse(e); }});
+    // expose for debugging
+    window._sidebarToggle = toggleCollapse;
+    window._sidebarShow = showSidebar;
   })();
   
   // 5. CSV Upload Logic

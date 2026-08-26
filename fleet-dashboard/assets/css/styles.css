@@ -39,13 +39,19 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
   position: relative;
 }
 .sidebar.collapsed { width: 72px !important; min-width: 72px !important; max-width: 72px !important; }
+.sidebar.hidden { width: 0 !important; min-width: 0 !important; max-width: 0 !important; overflow: hidden !important; border-right: 0; }
+.sidebar.hidden .sidebar-brand, .sidebar.hidden .sidebar-nav, .sidebar.hidden .sidebar-footer { opacity: 0; pointer-events: none; }
 .sidebar.collapsed .brand-text, .sidebar.collapsed .brand-sub, .sidebar.collapsed .nav-label, .sidebar.collapsed .sidebar-footer, .sidebar.collapsed .nav-badge { display: none !important; }
 .sidebar.collapsed .sidebar-nav a { justify-content: center; padding: 12px 8px; gap: 0; }
 .sidebar.collapsed .sidebar-nav a .icon { margin: 0; }
 .sidebar.collapsed .sidebar-brand { padding: 16px 8px; justify-content: center; }
 .sidebar-resizer { position: absolute; top: 0; right: 0; width: 6px; height: 100%; cursor: ew-resize; background: transparent; z-index: 5; }
 .sidebar-resizer:hover { background: rgba(59,130,246,0.18); }
-.sidebar.collapsed .sidebar-resizer { display: none; }
+.sidebar.collapsed .sidebar-resizer, .sidebar.hidden .sidebar-resizer { display: none; }
+.sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 40; backdrop-filter: blur(2px); }
+.sidebar-overlay.active { display: block; }
+.sidebar-fab { display: none; position: fixed; left: 16px; bottom: 16px; width: 44px; height: 44px; border-radius: 50%; background: var(--accent); color: #fff; border: none; font-size: 20px; cursor: pointer; box-shadow: 0 8px 24px rgba(0,0,0,0.35); z-index: 45; align-items: center; justify-content: center; }
+.sidebar.hidden ~ .main .sidebar-fab, body.sidebar-hidden .sidebar-fab { display: inline-flex; }
 .sidebar-brand {
   padding: 24px;
   display: flex;
@@ -278,7 +284,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
 #gmap .leaflet-control-attribution { background:rgba(15,23,42,0.78) !important; color:var(--text-sec); font-size:10px; }
 #gmap .leaflet-control-attribution a { color:#93c5fd; }
 
-/* ── RESPONSIVE ── */
+/* ── RESPONSIVE — mobile, tablet, window view ── */
 @media (max-width: 1280px) {
   #sec-analytics .card { min-height: 420px; }
   #sec-analytics .card .chart-wrap { min-height: 320px; }
@@ -290,9 +296,56 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
   .insight-grid { grid-template-columns:1fr }
   #sec-analytics .card { min-height: auto; }
   #sec-analytics .card .chart-wrap { min-height: 300px; max-height: 48vh; }
+  .topbar { padding: 12px 16px; flex-wrap: wrap; gap: 12px; }
+  .view-controls { gap: 10px; }
+}
+@media (max-width: 768px) {
+  body { flex-direction: column; }
+  .sidebar { position: fixed; left: 0; top: 0; height: 100vh; height: 100dvh; width: 280px !important; max-width: 85vw; min-width: 0 !important; z-index: 50; transform: translateX(-100%); transition: transform 0.28s ease, width 0.28s ease; box-shadow: 8px 0 32px rgba(0,0,0,0.45); }
+  .sidebar.mobile-open { transform: translateX(0); }
+  .sidebar.collapsed, .sidebar.hidden { width: 280px !important; max-width: 85vw; transform: translateX(-100%); }
+  .sidebar.mobile-open.collapsed, .sidebar.mobile-open.hidden { transform: translateX(0); width: 280px !important; }
+  .sidebar-resizer { display: none !important; }
+  .sidebar-overlay.active { display: block; }
+  .main { width: 100%; }
+  .content { padding: 16px 14px 32px; }
+  .card { padding: 16px 14px; }
+  .kpis { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .chart-wrap, .chart-wrap.tall, .chart-wrap.sm { min-height: 260px !important; max-height: none !important; height: 300px !important; }
+  #sec-analytics .card .chart-wrap { min-height: 280px !important; height: 320px !important; }
+  #gmap, #an-route-map, #earth-frame { height: 380px !important; }
+  .heatmap-wrap { padding: 8px 2px; }
+  .hm-label { width: 64px; min-width: 64px; font-size: 10px; }
+  .hm-col-labels { margin-left: 0; width: 100%; }
+  .hm-col-labels span:first-child { display: none; }
+  .hm-row { grid-template-columns: 64px repeat(5,1fr); }
+  .hm-cell { height: 36px; min-height: 36px; font-size: 9px; }
+  .topbar-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+  .view-controls .input, .view-controls .btn { flex: 1 1 auto; min-width: 120px; }
+  .table-scroll { margin: 0 -4px; }
+  .data-table { font-size: 12px; }
+  .data-table th, .data-table td { padding: 8px 8px; }
+}
+@media (max-width: 480px) {
+  .kpis { grid-template-columns: 1fr; }
+  .topbar h1 { font-size: 16px; }
+  .brand-text { font-size: 13px; }
+  .content { padding: 12px 10px 24px; }
+  .chart-wrap, #sec-analytics .card .chart-wrap { height: 280px !important; min-height: 260px !important; }
+  #gmap { height: 320px !important; }
+  .hm-cell { height: 32px; min-height: 32px; font-size: 8px; }
+  .hm-label { width: 52px; min-width: 52px; font-size: 9px; }
+  .hm-row { grid-template-columns: 52px repeat(5,1fr); gap: 3px; }
+  .hm-col-labels { gap: 3px; }
 }
 @media (min-width: 1600px) {
   .content { max-width: 1680px; }
   #sec-analytics .card .chart-wrap { min-height: 420px; }
   .hm-cell { height:46px; min-height:46px; }
+}
+/* Windowed view — when viewport height is limited, allow full collapse to 0 */
+@media (max-height: 720px) {
+  .content { padding: 16px 20px 24px; }
+  .card { padding: 16px; }
+  .chart-wrap.tall { height: 340px !important; min-height: 300px !important; }
 }
