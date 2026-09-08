@@ -580,15 +580,19 @@ window.VIEWS = {
       });
       _pathValidG = _undForPath.length ? _undForPath : [];
     }
-    for(let i=1;i<_pathValidG.length;i++){
-      const a=_pathValidG[i-1], b=_pathValidG[i];
-      const fuelAct = ((a.fuel||0)/10 + (b.fuel||0)/10)/2;
-      const spd = ((a.gps||0)+(b.gps||0))/2;
-      const col = mode==='speed' ? speedToColor(spd) : fuelToColor(fuelAct);
-      const w = mode==='speed' ? Math.max(3, Math.min(7, 3+spd/8)) : Math.max(3, Math.min(7, 3+fuelAct/40));
-      const seg = L.polyline([[a.lat,a.lon],[b.lat,b.lon]], { color:col, weight:w, opacity:0.92, lineCap:'round', lineJoin:'round' });
-      seg.bindPopup(`<div style="font:12px Inter,sans-serif"><b>${a.time||''} → ${b.time||''}</b><br>Fuel ${(fuelAct).toFixed(1)} L/h (raw ${((a.fuel+b.fuel)/2).toFixed(0)})<br>Speed ${spd.toFixed(1)} km/h<br>Grad ${(a.grad||0).toFixed(1)}° · Ret ${a.ret||0}<br><span style="color:#64748b">${a.lat.toFixed(5)},${a.lon.toFixed(5)} → ${b.lat.toFixed(5)},${b.lon.toFixed(5)}</span></div>`);
-      seg.addTo(map); window._gmapLayers.segments.push(seg);
+    // For undulation mode, don't connect dots — only view undulation points (no path)
+    const _isUndModeForPath = mode==='und' || mode==='undRed';
+    if(!_isUndModeForPath){
+      for(let i=1;i<_pathValidG.length;i++){
+        const a=_pathValidG[i-1], b=_pathValidG[i];
+        const fuelAct = ((a.fuel||0)/10 + (b.fuel||0)/10)/2;
+        const spd = ((a.gps||0)+(b.gps||0))/2;
+        const col = mode==='speed' ? speedToColor(spd) : fuelToColor(fuelAct);
+        const w = mode==='speed' ? Math.max(3, Math.min(7, 3+spd/8)) : Math.max(3, Math.min(7, 3+fuelAct/40));
+        const seg = L.polyline([[a.lat,a.lon],[b.lat,b.lon]], { color:col, weight:w, opacity:0.92, lineCap:'round', lineJoin:'round' });
+        seg.bindPopup(`<div style="font:12px Inter,sans-serif"><b>${a.time||''} → ${b.time||''}</b><br>Fuel ${(fuelAct).toFixed(1)} L/h (raw ${((a.fuel+b.fuel)/2).toFixed(0)})<br>Speed ${spd.toFixed(1)} km/h<br>Grad ${(a.grad||0).toFixed(1)}° · Ret ${a.ret||0}<br><span style="color:#64748b">${a.lat.toFixed(5)},${a.lon.toFixed(5)} → ${b.lat.toFixed(5)},${b.lon.toFixed(5)}</span></div>`);
+        seg.addTo(map); window._gmapLayers.segments.push(seg);
+      }
     }
     // heat dots — respect dumping filter when in dumping mode (show only dumping dots)
     const _isUndModeForDots = mode==='und' || mode==='undRed';
