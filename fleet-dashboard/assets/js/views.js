@@ -882,6 +882,8 @@ window.VIEWS = {
     if(statsEl){
       statsEl.innerHTML=`Segments: <b>${climbCount} climbs</b> · <b>${flatCount} flats</b> · <b>${bumpCount} bumps</b> · Total length ~<b>${(totalDist/1000).toFixed(2)} km</b> · Points: ${allCoords.length}`;
     }
+    // also render undulation (Rack/Bias) in same section — same date/dumper
+    this.renderGkUndulation(rows);
     // bind controls once
     if(!this._gkBound){
       this._gkBound=true;
@@ -894,6 +896,114 @@ window.VIEWS = {
       });
       if(loadBtn) loadBtn.addEventListener('click', ()=> this.renderGradientKml());
     }
+  },
+
+  renderGkUndulation(rows){
+    const canvas = document.getElementById('gk-und-canvas');
+    const wrap = document.getElementById('gk-und-map');
+    const emptyEl = document.getElementById('gk-und-empty');
+    const tableEl = document.getElementById('gk-und-table');
+    const statsEl = document.getElementById('gk-und-stats');
+    const metaEl = document.getElementById('gk-und-meta');
+    if(!canvas || !wrap) return;
+    // filter rows with valid Rack/Bias and GPS
+    const pts = rows.map(r=>{
+      const rack = parseFloat(r['Rack'] ?? r['rack'] ?? r['Rack'] ?? 0);
+      const bias = parseFloat(r['Bias'] ?? r['bias'] ?? 0);
+      const lat = r.lat, lon = r.lon;
+      const intensity = Math.max(Math.abs(rack), Math.abs(bias));
+      return {rack, bias, intensity, lat, lon, time:r.time||'', raw:r};
+    }).filter(p=> isFinite(p.intensity) && p.lat!=null && p.lon!=null && isFinite(p.lat) && isFinite(p.lon));
+    if(!pts.length){
+      if(emptyEl){ emptyEl.style.display='flex'; emptyEl.textContent='No undulation GPS points.'; }
+      if(tableEl) tableEl.innerHTML='';
+      if(statsEl) statsEl.textContent='';
+      if(metaEl) metaEl.textContent='';
+      return;
+    }
+    // stats
+    const redPts = pts.filter(p=> p.intensity >= 16.1);
+    const greenPts = pts.filter(p=> p.intensity >= 12.0 && p.intensity < 16.1);
+    if(metaEl) metaEl.textContent = `${pts.length} pts · Red ≥16.1: ${redPts.length} · Green 12.0–16.1: ${greenPts.length}`;
+    // canvas setup
+    const dpr = window.devicePixelRatio || 1;
+    const rect = wrap.getBoundingClientRect();
+    const W = Math.max(320, Math.floor(rect.width));
+    const H = 420;
+    canvas.width = W*dpr; canvas.height=H*dpr; canvas.style.width=W+'px'; canvas.style.height=H+'px';
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,W,H);
+    // bounds
+    let minLat=Math.min(...pts.map(p=>p.lat)), maxLat=Math.max(...pts.map(p=>p.lat));
+    let minLon=Math.min(...pts.map(p=>p.lon)), maxLon=Math.max(...pts.map(p=>p.lon));
+    const padLat=(maxLat-minLat)*0.08||0.001, padLon=(maxLon-minLon)*0.08||0.001;
+    minLat-=padLat; maxLat+=padLat; minLon-=padLon; maxLon+=padLon;
+    const latSpan=maxLat-minLat, lonSpan=maxLon-minLon;
+    const padL=48, padR=12, padT=12, padB=28;
+    const plotW=W-padL-padR, plotH=H-padT-padB;
+    ctx.fillStyle='#0b1220'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#0f1a2e'; ctx.fillRect(padL,padT,plotW,plotH);
+    ctx.strokeStyle='rgba(51,65,85,0.22)'; ctx.lineWidth=1;
+    for(let i=1;i<4;i++){ const gx=padL+plotW*i/4, gy=padT+plotH*i/4; ctx.beginPath(); ctx.moveTo(gx,padT); ctx.lineTo(gx,padT+plotH); ctx.stroke(); ctx.beginPath(); ctx.moveTo(padL,gy); ctx.lineTo(padL+plotW,gy); ctx.stroke(); }
+    ctx.strokeStyle='#334155'; ctx.lineWidth=1.2; ctx.strokeRect(padL,padT,plotW,plotH);
+    const project=(lat,lon)=>[padL+(lon-minLon)/lonSpan*plotW, padT+plotH-(lat-minLat)/latSpan*plotH];
+    // draw all points faint, then red on top, then green
+    pts.forEach(p=>{
+      const [x,y]=project(p.lat,p.lon);
+      let col='#1e293b';
+      if(p.intensity >= 16.1) col='#ef4444';
+      else if(p.intensity >= 12.0) col='#10b981';
+      else col='rgba(51,65,85,0.55)';
+      const r = p.intensity >=16.1 ? 4.5 : p.intensity>=12.0 ? 3.5 : 2.2;
+      ctx.fillStyle=col; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+      if(p.intensity>=12.0){ ctx.strokeStyle='rgba(15,23,42,0.9)'; ctx.lineWidth=1; ctx.stroke(); }
+    });
+    // axes
+    ctx.fillStyle='#94a3b8'; ctx.font='11px Inter, system-ui, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+    for(let i=0;i<5;i++){ const t=i/4, lon=minLon+lonSpan*t, x=padL+plotW*t; ctx.strokeStyle='#475569'; ctx.beginPath(); ctx.moveTo(x,padT+plotH); ctx.lineTo(x,padT+plotH+5); ctx.stroke(); ctx.fillText(lon.toFixed(4), x, padT+plotH+8); }
+    ctx.textAlign='right'; ctx.textBaseline='middle';
+    for(let i=0;i<5;i++){ const t=i/4, lat=minLat+latSpan*t, y=padT+plotH-plotH*t; ctx.strokeStyle='#475569'; ctx.beginPath(); ctx.moveTo(padL-5,y); ctx.lineTo(padL,y); ctx.stroke(); ctx.fillText(lat.toFixed(4), padL-8, y); }
+    ctx.fillStyle='#e2e8f0'; ctx.font='600 11px Inter'; ctx.textAlign='center'; ctx.fillText('Longitude (°E)', padL+plotW/2, H-12);
+    ctx.save(); ctx.translate(14, padT+plotH/2); ctx.rotate(-Math.PI/2); ctx.fillText('Latitude (°N)',0,0); ctx.restore();
+    if(emptyEl) emptyEl.style.display='none';
+    // table only red
+    const redSorted = [...redPts].sort((a,b)=> b.intensity - a.intensity).slice(0,100);
+    if(tableEl){
+      if(!redSorted.length){
+        tableEl.innerHTML='<tr><td style="color:var(--text-muted); padding:16px; text-align:center">No red undulation points (≥16.1) — road is within spec.</td></tr>';
+      } else {
+        tableEl.innerHTML='<tr><th>#</th><th>Lat</th><th>Lon</th><th>Rack</th><th>Bias</th><th>Intensity max(|R|,|B|)</th><th>Time</th></tr>' +
+          redSorted.map((p,i)=> `<tr style="background:rgba(239,68,68,0.06)"><td>${i+1}</td><td>${p.lat.toFixed(5)}</td><td>${p.lon.toFixed(5)}</td><td>${p.rack.toFixed(2)}</td><td>${p.bias.toFixed(2)}</td><td><b style="color:#ef4444">${p.intensity.toFixed(2)}</b></td><td style="font-size:11px; white-space:nowrap">${p.time||''}</td></tr>`).join('');
+      }
+    }
+    if(statsEl){
+      statsEl.innerHTML=`Red ≥16.1: <b style="color:#ef4444">${redPts.length}</b> / ${pts.length} pts (${(redPts.length/pts.length*100).toFixed(1)}%) · Green 12.0–16.1: <b style="color:#10b981">${greenPts.length}</b> · Max intensity <b>${Math.max(...pts.map(p=>p.intensity)).toFixed(2)}</b>`;
+    }
+    // tooltip
+    const ptsProjected = pts.map(p=>{ const [x,y]=project(p.lat,p.lon); return {x,y,p}; });
+    const tooltip = document.getElementById('an-route-tooltip') || document.createElement('div');
+    // reuse route tooltip is inside an-route-map, create one for undulation if needed
+    let undTip = document.getElementById('gk-und-tooltip');
+    if(!undTip){
+      undTip = document.createElement('div');
+      undTip.id='gk-und-tooltip';
+      undTip.style.cssText='position:absolute; pointer-events:none; background:#0f172a; color:#f8fafc; border:1px solid #334155; border-radius:8px; padding:8px 10px; font-size:12px; line-height:1.4; display:none; max-width:260px; box-shadow:0 8px 24px rgba(0,0,0,0.45); z-index:2';
+      wrap.appendChild(undTip);
+    }
+    canvas.onmousemove=(ev)=>{
+      const rect2=canvas.getBoundingClientRect();
+      const mx=ev.clientX-rect2.left, my=ev.clientY-rect2.top;
+      let best=null, bestD=12;
+      for(const o of ptsProjected){ const d=Math.hypot(o.x-mx, o.y-my); if(d<bestD){bestD=d; best=o;} }
+      if(best){
+        undTip.style.display='block';
+        undTip.style.left=Math.min(W-270, Math.max(8, best.x+14))+'px';
+        undTip.style.top=Math.max(8, best.y-56)+'px';
+        undTip.innerHTML=`<div style="font-weight:700">${best.p.lat.toFixed(5)}, ${best.p.lon.toFixed(5)}</div><div>Rack <b>${best.p.rack.toFixed(2)}</b> · Bias <b>${best.p.bias.toFixed(2)}</b> · Intensity <b style="color:${best.p.intensity>=16.1?'#ef4444': best.p.intensity>=12.0?'#10b981':'#94a3b8'}">${best.p.intensity.toFixed(2)}</b></div><div style="color:#94a3b8; font-size:11px">${best.p.time||''} · ${best.p.intensity>=16.1?'🔴 Red ≥16.1': best.p.intensity>=12.0?'🟢 Green ≥12.0':'Normal'}</div>`;
+      } else undTip.style.display='none';
+    };
+    canvas.onmouseleave=()=> undTip.style.display='none';
   },
 
   _parseCoord(s){
