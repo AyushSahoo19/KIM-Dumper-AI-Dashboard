@@ -650,10 +650,10 @@ window.VIEWS = {
     // undulation — continuous trace (violet) + green transparent for small undulation within limit (exclusive view)
     const isUndMode = mode==='und' || mode==='undRed';
     if(isUndMode){
-      // continuous trace of dumper movement — violet transparent base (entire valid path)
+      // continuous trace of dumper movement — navy transparent base (entire valid path)
       if(valid.length>1){
         const traceCoords = valid.map(r=>[r.lat,r.lon]);
-        const baseTrace = L.polyline(traceCoords, {color:'#8b5cf6', weight:5, opacity:0.28, lineCap:'round', lineJoin:'round'});
+        const baseTrace = L.polyline(traceCoords, {color:'#1e3a8a', weight:5, opacity:0.32, lineCap:'round', lineJoin:'round'});
         baseTrace.addTo(map); window._gmapLayers.segments.push(baseTrace);
       }
       // small undulation within limit (12.0–16.1) — green transparent continuous segments
@@ -1032,10 +1032,10 @@ window.VIEWS = {
     for(let i=1;i<4;i++){ const gx=padL+plotW*i/4, gy=padT+plotH*i/4; ctx.beginPath(); ctx.moveTo(gx,padT); ctx.lineTo(gx,padT+plotH); ctx.stroke(); ctx.beginPath(); ctx.moveTo(padL,gy); ctx.lineTo(padL+plotW,gy); ctx.stroke(); }
     ctx.strokeStyle='#334155'; ctx.lineWidth=1.2; ctx.strokeRect(padL,padT,plotW,plotH);
     const project=(lat,lon)=>[padL+(lon-minLon)/lonSpan*plotW, padT+plotH-(lat-minLat)/latSpan*plotH];
-    // continuous trace — violet transparent base + green transparent for small undulation within limit (12–16.1)
+    // continuous trace — navy transparent base + green transparent for small undulation within limit (12–16.1)
     if(pts.length>1){
-      // base violet path for entire trace
-      ctx.strokeStyle='rgba(139,92,246,0.28)'; ctx.lineWidth=3.5; ctx.lineCap='round'; ctx.lineJoin='round';
+      // base navy path for entire trace
+      ctx.strokeStyle='rgba(30,58,138,0.35)'; ctx.lineWidth=3.8; ctx.lineCap='round'; ctx.lineJoin='round';
       ctx.beginPath();
       const [sx,sy]=project(pts[0].lat, pts[0].lon);
       ctx.moveTo(sx,sy);
