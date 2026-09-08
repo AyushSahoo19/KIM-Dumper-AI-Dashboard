@@ -1040,12 +1040,14 @@ window.VIEWS = {
         const hoist = String(r['Hoist_Lever_Pos'] ?? r['hoist_lever'] ?? '0');
         const weight = parseFloat(r['Live_Weight_ton'] ?? r['live_weight'] ?? 0);
         const time = r['Time'] ?? r['time'] ?? '';
+        const rack = parseFloat(r['Rack'] ?? r['rack'] ?? r['Rack'] ?? 0);
+        const bias = parseFloat(r['Bias'] ?? r['bias'] ?? 0);
         let lat = r['GPS_Latitude'] ? self._parseCoord(String(r['GPS_Latitude'])) : (r['lat'] ?? r['gps_lat'] ?? null);
         let lon = r['GPS_Longitude'] ? self._parseCoord(String(r['GPS_Longitude'])) : (r['lon'] ?? r['gps_lon'] ?? null);
         if(lat!==null && typeof lat==='string') lat=parseFloat(lat);
         if(lon!==null && typeof lon==='string') lon=parseFloat(lon);
         if(isNaN(lat)) lat=null; if(isNaN(lon)) lon=null;
-        if(!isNaN(fuel) && !isNaN(rpm)) out.push({fuel, gps: isNaN(gps)? (isNaN(vSpd)?0:vSpd/100) : gps, rpm, grad: isNaN(grad)?0:grad, ret: isNaN(ret)?0:ret, vs, hoist, weight, lat, lon, time});
+        if(!isNaN(fuel) && !isNaN(rpm)) out.push({fuel, gps: isNaN(gps)? (isNaN(vSpd)?0:vSpd/100) : gps, rpm, grad: isNaN(grad)?0:grad, ret: isNaN(ret)?0:ret, vs, hoist, weight, lat, lon, time, Rack: isNaN(rack)?0:rack, Bias: isNaN(bias)?0:bias, rack: isNaN(rack)?0:rack, bias: isNaN(bias)?0:bias});
       });
     };
     if(DATA.timeseries && DATA.timeseries[date]){
@@ -1080,11 +1082,16 @@ window.VIEWS = {
       const t = Math.max(0,Math.min(1, i/900 + (rnd()-0.5)*0.08));
       const lat = C.from.lat + latSpan*t + (rnd()-0.5)*0.001;
       const lon = C.from.lon + lonSpan*t + (rnd()-0.5)*0.001;
-      rows.push({fuel, gps, rpm, grad, ret, vs:vsPick, hoist, weight: rnd()*100, lat, lon, time:`syn-${i}`});
+      // Rack/Bias for undulation: mostly normal, occasional red spikes near hotspots
+      let rack = (rnd()-0.5)*6, bias=(rnd()-0.5)*6;
+      if(rnd()<0.04) { rack = (rnd()<0.5? -1:1)*(16.5 + rnd()*6); bias=(rnd()-0.5)*4; }
+      else if(rnd()<0.12) { rack=(rnd()-0.5)*8; bias=(rnd()<0.5? -1:1)*(12.5 + rnd()*3); }
+      if(rnd()<0.02) bias = (rnd()<0.5? -1:1)*(17 + rnd()*5);
+      rows.push({fuel, gps, rpm, grad, ret, vs:vsPick, hoist, weight: rnd()*100, lat, lon, time:`syn-${i}`, Rack:rack, Bias:bias, rack, bias});
     }
-    for(let i=0;i<24;i++) rows.push({fuel:600+rnd()*400, gps:1+rnd()*2, rpm:1650+rnd()*350, grad: (rnd()-0.5)*2, ret:0, vs:'5', hoist:'4', weight: 30+rnd()*10, lat:C.from.lat+latSpan*0.62+(rnd()-0.5)*0.0006, lon:C.from.lon+lonSpan*0.62+(rnd()-0.5)*0.0006, time:`syn-dump5-${i}`});
-    for(let i=0;i<18;i++) rows.push({fuel: 140+rnd()*120, gps: rnd()*3, rpm: 640+rnd()*60, grad: (rnd()-0.5)*3, ret:0, vs:'1', hoist:'0', weight: rnd()*4, lat:C.from.lat+latSpan*0.635+(rnd()-0.5)*0.0005, lon:C.from.lon+lonSpan*0.635+(rnd()-0.5)*0.0005, time:`syn-gap-${i}`});
-    for(let i=0;i<29;i++) rows.push({fuel:400+rnd()*400, gps:0.5+rnd()*1.5, rpm:680+rnd()*420, grad: (rnd()-0.5)*2, ret:0, vs:'6', hoist:'4', weight: 55+rnd()*15, lat:C.from.lat+latSpan*0.65+(rnd()-0.5)*0.0006, lon:C.from.lon+lonSpan*0.65+(rnd()-0.5)*0.0006, time:`syn-dump6-${i}`});
+    for(let i=0;i<24;i++) rows.push({fuel:600+rnd()*400, gps:1+rnd()*2, rpm:1650+rnd()*350, grad: (rnd()-0.5)*2, ret:0, vs:'5', hoist:'4', weight: 30+rnd()*10, lat:C.from.lat+latSpan*0.62+(rnd()-0.5)*0.0006, lon:C.from.lon+lonSpan*0.62+(rnd()-0.5)*0.0006, time:`syn-dump5-${i}`, Rack:(rnd()-0.5)*5, Bias:(rnd()-0.5)*5, rack:(rnd()-0.5)*5, bias:(rnd()-0.5)*5});
+    for(let i=0;i<18;i++) rows.push({fuel: 140+rnd()*120, gps: rnd()*3, rpm: 640+rnd()*60, grad: (rnd()-0.5)*3, ret:0, vs:'1', hoist:'0', weight: rnd()*4, lat:C.from.lat+latSpan*0.635+(rnd()-0.5)*0.0005, lon:C.from.lon+lonSpan*0.635+(rnd()-0.5)*0.0005, time:`syn-gap-${i}`, Rack:(rnd()-0.5)*4, Bias:(rnd()-0.5)*4, rack:(rnd()-0.5)*4, bias:(rnd()-0.5)*4});
+    for(let i=0;i<29;i++) rows.push({fuel:400+rnd()*400, gps:0.5+rnd()*1.5, rpm:680+rnd()*420, grad: (rnd()-0.5)*2, ret:0, vs:'6', hoist:'4', weight: 55+rnd()*15, lat:C.from.lat+latSpan*0.65+(rnd()-0.5)*0.0006, lon:C.from.lon+lonSpan*0.65+(rnd()-0.5)*0.0006, time:`syn-dump6-${i}`, Rack:(rnd()-0.5)*6, Bias:(rnd()-0.5)*6, rack:(rnd()-0.5)*6, bias:(rnd()-0.5)*6});
     return rows;
   },
 
