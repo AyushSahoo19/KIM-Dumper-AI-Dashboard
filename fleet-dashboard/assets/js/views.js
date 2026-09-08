@@ -647,21 +647,23 @@ window.VIEWS = {
       });
       window._gmapDumpStats = {dumpTotal, dumpAbove, dumpBelow: dumpTotal-dumpAbove};
     }
-    // undulation — continuous trace (violet) + green transparent for small undulation within limit (exclusive view)
-    const isUndMode = mode==='und' || mode==='undRed';
+    // undulation — continuous trace (navy) + green for small within limit — separate for Rack/Bias when filtered
+    const isUndMode = mode==='und' || mode==='undRed' || mode==='rack' || mode==='rackRed' || mode==='bias' || mode==='biasRed';
     if(isUndMode){
       // continuous trace of dumper movement — navy transparent base (entire valid path)
       if(valid.length>1){
         const traceCoords = valid.map(r=>[r.lat,r.lon]);
-        const baseTrace = L.polyline(traceCoords, {color:'#1e3a8a', weight:5, opacity:0.32, lineCap:'round', lineJoin:'round'});
+        const baseTrace = L.polyline(traceCoords, {color:'#1e3a8a', weight:5, opacity:0.28, lineCap:'round', lineJoin:'round'});
         baseTrace.addTo(map); window._gmapLayers.segments.push(baseTrace);
       }
-      // small undulation within limit (12.0–16.1) — green transparent continuous segments
+      // small undulation within limit (12.0–16.1) — green transparent continuous segments (filtered per Rack/Bias if needed)
       const smallUndSegments = [];
       for(let i=1;i<valid.length;i++){
         const a=valid[i-1], b=valid[i];
-        const itA=Math.max(Math.abs(parseFloat(a.Rack??a.rack??0)), Math.abs(parseFloat(a.Bias??a.bias??0)));
-        const itB=Math.max(Math.abs(parseFloat(b.Rack??b.rack??0)), Math.abs(parseFloat(b.Bias??b.bias??0)));
+        let itA, itB;
+        if(mode==='rack' || mode==='rackRed'){ itA=Math.abs(parseFloat(a.Rack??a.rack??0)); itB=Math.abs(parseFloat(b.Rack??b.rack??0)); }
+        else if(mode==='bias' || mode==='biasRed'){ itA=Math.abs(parseFloat(a.Bias??a.bias??0)); itB=Math.abs(parseFloat(b.Bias??b.bias??0)); }
+        else { itA=Math.max(Math.abs(parseFloat(a.Rack??a.rack??0)), Math.abs(parseFloat(a.Bias??a.bias??0))); itB=Math.max(Math.abs(parseFloat(b.Rack??b.rack??0)), Math.abs(parseFloat(b.Bias??b.bias??0))); }
         const avgIt=(itA+itB)/2;
         if(avgIt>=12.0 && avgIt<16.1){
           smallUndSegments.push([[a.lat,a.lon],[b.lat,b.lon]]);
@@ -674,50 +676,107 @@ window.VIEWS = {
       const allUndPoints = valid.filter(r=>{
         const rack = parseFloat(r.Rack ?? r.rack ?? r['Rack'] ?? 0);
         const bias = parseFloat(r.Bias ?? r.bias ?? r['Bias'] ?? 0);
-        const intensity = Math.max(Math.abs(rack), Math.abs(bias));
+        let intensity;
+        if(mode==='rack' || mode==='rackRed') intensity = Math.abs(rack);
+        else if(mode==='bias' || mode==='biasRed') intensity = Math.abs(bias);
+        else intensity = Math.max(Math.abs(rack), Math.abs(bias));
         return intensity >= 12.0;
       });
       let undPoints = allUndPoints;
-      if(mode==='undRed') undPoints = allUndPoints.filter(r=> Math.max(Math.abs(parseFloat(r.Rack ?? r.rack ?? 0)), Math.abs(parseFloat(r.Bias ?? r.bias ?? 0))) >= 16.1);
+      if(mode==='undRed' || mode==='rackRed' || mode==='biasRed'){
+        undPoints = allUndPoints.filter(r=>{
+          let it;
+          if(mode==='rackRed') it=Math.abs(parseFloat(r.Rack??r.rack??0));
+          else if(mode==='biasRed') it=Math.abs(parseFloat(r.Bias??r.bias??0));
+          else it=Math.max(Math.abs(parseFloat(r.Rack ?? r.rack ?? 0)), Math.abs(parseFloat(r.Bias ?? r.bias ?? 0)));
+          return it >= 16.1;
+        });
+      }
       undPoints.forEach(r=>{
-        const rack = parseFloat(r.Rack ?? r.rack ?? 0);
-        const bias = parseFloat(r.Bias ?? r.bias ?? 0);
-        const intensity = Math.max(Math.abs(rack), Math.abs(bias));
+        let rack = parseFloat(r.Rack ?? r.rack ?? 0);
+        let bias = parseFloat(r.Bias ?? r.bias ?? 0);
+        let intensity;
+        if(mode==='rack' || mode==='rackRed') intensity = Math.abs(rack);
+        else if(mode==='bias' || mode==='biasRed') intensity = Math.abs(bias);
+        else intensity = Math.max(Math.abs(rack), Math.abs(bias));
         const col = intensity >= 16.1 ? '#ef4444' : '#10b981';
         const rad = intensity >= 16.1 ? 6 : 4;
         const c = L.circleMarker([r.lat, r.lon], { radius: rad, fillColor: col, color: '#fff', weight: 1.5, fillOpacity: 0.88 });
-        c.bindPopup(`<div style="font:12px Inter"><b style="color:${col}">Undulation ${intensity.toFixed(2)} ${intensity>=16.1?'🔴 Red ≥16.1':'🟢 Green ≥12.0'}</b><br>Rack ${rack.toFixed(2)} · Bias ${bias.toFixed(2)}<br>Time ${r.time||''}<br><span style="color:#64748b">${r.lat.toFixed(5)},${r.lon.toFixed(5)}</span></div>`);
+        c.bindPopup(`<div style="font:12px Inter"><b style="color:${col}">${mode.startsWith('rack')?'Rack':mode.startsWith('bias')?'Bias':'Undulation'} ${intensity.toFixed(2)} ${intensity>=16.1?'🔴 Red ≥16.1':'🟢 Green ≥12.0'}</b><br>Rack ${rack.toFixed(2)} · Bias ${bias.toFixed(2)}<br>Time ${r.time||''}<br><span style="color:#64748b">${r.lat.toFixed(5)},${r.lon.toFixed(5)}</span></div>`);
         c.bindTooltip(`${intensity.toFixed(1)} ${intensity>=16.1?'🔴':''}`, {direction:'top'});
         c.addTo(map); window._gmapLayers.markers.push(c);
       });
-      window._gmapUndStats = {total: undPoints.length, red: undPoints.filter(r=> Math.max(Math.abs(parseFloat(r.Rack ?? r.rack ?? 0)), Math.abs(parseFloat(r.Bias ?? r.bias ?? 0)))>=16.1).length, green: undPoints.filter(r=> {const it=Math.max(Math.abs(parseFloat(r.Rack||0)),Math.abs(parseFloat(r.Bias||0))); return it>=12 && it<16.1;}).length};
-      // for red points, also show permanent value label on map (intensity)
+      // stats for legend
+      let _gmapUndRedCount = 0;
+      if(mode==='rack' || mode==='rackRed') _gmapUndRedCount = undPoints.filter(r=> Math.abs(parseFloat(r.Rack??r.rack??0))>=16.1).length;
+      else if(mode==='bias' || mode==='biasRed') _gmapUndRedCount = undPoints.filter(r=> Math.abs(parseFloat(r.Bias??r.bias??0))>=16.1).length;
+      else _gmapUndRedCount = undPoints.filter(r=> Math.max(Math.abs(parseFloat(r.Rack ?? r.rack ?? 0)), Math.abs(parseFloat(r.Bias ?? r.bias ?? 0)))>=16.1).length;
+      window._gmapUndStats = {total: undPoints.length, red: _gmapUndRedCount, green: undPoints.length - _gmapUndRedCount};
+      // for red points, also show permanent value label on map (intensity per filter)
       undPoints.forEach(r=>{
-        const rack = parseFloat(r.Rack ?? r.rack ?? 0);
-        const bias = parseFloat(r.Bias ?? r.bias ?? 0);
-        const intensity = Math.max(Math.abs(rack), Math.abs(bias));
+        let rack = parseFloat(r.Rack ?? r.rack ?? 0);
+        let bias = parseFloat(r.Bias ?? r.bias ?? 0);
+        let intensity;
+        if(mode==='rack' || mode==='rackRed') intensity=Math.abs(rack);
+        else if(mode==='bias' || mode==='biasRed') intensity=Math.abs(bias);
+        else intensity = Math.max(Math.abs(rack), Math.abs(bias));
         if(intensity >= 16.1){
           const lbl = L.divIcon({className:'', html:`<div style="background:rgba(239,68,68,0.92); color:#fff; font:700 10px Inter; padding:1px 4px; border-radius:4px; border:1px solid #fff; white-space:nowrap; box-shadow:0 1px 4px rgba(0,0,0,0.45)">${intensity.toFixed(1)}</div>`, iconSize:[36,14], iconAnchor:[18, -6]});
           const mLbl = L.marker([r.lat, r.lon], {icon: lbl, interactive:false, zIndexOffset:300});
           mLbl.addTo(map); window._gmapLayers.markers.push(mLbl);
         }
       });
-      // table below map — only red points, visible only in undulation view
-      const redForTable = undPoints.filter(r=> Math.max(Math.abs(parseFloat(r.Rack ?? r.rack ?? 0)), Math.abs(parseFloat(r.Bias ?? r.bias ?? 0)))>=16.1).sort((a,b)=>{
-        const ia=Math.max(Math.abs(parseFloat(a.Rack??0)),Math.abs(parseFloat(a.Bias??0)));
-        const ib=Math.max(Math.abs(parseFloat(b.Rack??0)),Math.abs(parseFloat(b.Bias??0)));
+      // tables below map — separate for Rack and Bias, only red ≥16.1 per filter, visible only in undulation view
+      const isRackMode = mode==='rack' || mode==='rackRed';
+      const isBiasMode = mode==='bias' || mode==='biasRed';
+      const redForTableAll = undPoints.filter(r=>{
+        let it;
+        if(isRackMode) it=Math.abs(parseFloat(r.Rack??r.rack??0));
+        else if(isBiasMode) it=Math.abs(parseFloat(r.Bias??r.bias??0));
+        else it=Math.max(Math.abs(parseFloat(r.Rack ?? r.rack ?? 0)), Math.abs(parseFloat(r.Bias ?? r.bias ?? 0)));
+        return it>=16.1;
+      }).sort((a,b)=>{
+        const ia=isRackMode? Math.abs(parseFloat(a.Rack??0)) : isBiasMode? Math.abs(parseFloat(a.Bias??0)) : Math.max(Math.abs(parseFloat(a.Rack??0)),Math.abs(parseFloat(a.Bias??0)));
+        const ib=isRackMode? Math.abs(parseFloat(b.Rack??0)) : isBiasMode? Math.abs(parseFloat(b.Bias??0)) : Math.max(Math.abs(parseFloat(b.Rack??0)),Math.abs(parseFloat(b.Bias??0)));
         return ib-ia;
       }).slice(0,120);
+      // split into Rack and Bias tables
+      const rackRed = redForTableAll.filter(r=> Math.abs(parseFloat(r.Rack??r.rack??0))>=16.1).slice(0,60);
+      const biasRed = redForTableAll.filter(r=> Math.abs(parseFloat(r.Bias??r.bias??0))>=16.1).slice(0,60);
       const undTableCard = document.getElementById('gm-und-table-card');
       const undTable = document.getElementById('gm-und-table');
       const undTableStats = document.getElementById('gm-und-table-stats');
       if(undTableCard) undTableCard.style.display = 'block';
+      // populate separate Rack/Bias tables if they exist, else fallback to single
+      const rackTableEl = document.getElementById('gm-und-rack-table');
+      const biasTableEl = document.getElementById('gm-und-bias-table');
+      const rackStatsEl = document.getElementById('gm-und-rack-stats');
+      const biasStatsEl = document.getElementById('gm-und-bias-stats');
+      const populateTable = (el, arr, isRack)=>{
+        if(!el) return;
+        if(!arr.length){
+          el.innerHTML='<tr><td style="color:var(--text-muted); padding:10px; text-align:center">No red '+(isRack?'Rack':'Bias')+' ≥16.1</td></tr>';
+        } else {
+          el.innerHTML='<tr><th>#</th><th>Lat</th><th>Lon</th><th>'+(isRack?'Rack':'Bias')+'</th><th>Intensity</th><th>Time</th></tr>' +
+            arr.map((r,i)=>{
+              const rack=parseFloat(r.Rack??r.rack??0), bias=parseFloat(r.Bias??r.bias??0);
+              const it=isRack? Math.abs(rack) : Math.abs(bias);
+              return `<tr style="background:rgba(239,68,68,0.04)"><td>${i+1}</td><td>${r.lat.toFixed(5)}</td><td>${r.lon.toFixed(5)}</td><td>${(isRack?rack:bias).toFixed(2)}</td><td><b style="color:#ef4444">${it.toFixed(2)}</b></td><td style="font-size:11px; white-space:nowrap">${r.time||''}</td></tr>`;
+            }).join('');
+        }
+      };
+      if(rackTableEl && biasTableEl){
+        populateTable(rackTableEl, rackRed, true);
+        populateTable(biasTableEl, biasRed, false);
+        if(rackStatsEl) rackStatsEl.textContent = `Rack Red: ${rackRed.length} / ${undPoints.filter(r=> Math.abs(parseFloat(r.Rack??0))>=12).length} und`;
+        if(biasStatsEl) biasStatsEl.textContent = `Bias Red: ${biasRed.length} / ${undPoints.filter(r=> Math.abs(parseFloat(r.Bias??0))>=12).length} und`;
+      }
       if(undTable){
-        if(!redForTable.length){
+        if(!redForTableAll.length){
           undTable.innerHTML='<tr><td style="color:var(--text-muted); padding:14px; text-align:center">No red undulation points (≥16.1) for this filter — road within spec.</td></tr>';
         } else {
           undTable.innerHTML='<tr><th>#</th><th>Lat</th><th>Lon</th><th>Rack</th><th>Bias</th><th>Intensity</th><th>Time</th></tr>' +
-            redForTable.map((r,i)=>{
+            redForTableAll.map((r,i)=>{
               const rack=parseFloat(r.Rack??r.rack??0), bias=parseFloat(r.Bias??r.bias??0);
               const it=Math.max(Math.abs(rack),Math.abs(bias));
               return `<tr style="background:rgba(239,68,68,0.04)"><td>${i+1}</td><td>${r.lat.toFixed(5)}</td><td>${r.lon.toFixed(5)}</td><td>${rack.toFixed(2)}</td><td>${bias.toFixed(2)}</td><td><b style="color:#ef4444">${it.toFixed(2)}</b></td><td style="font-size:11px; white-space:nowrap">${r.time||''}</td></tr>`;
@@ -1107,8 +1166,33 @@ window.VIEWS = {
     ctx.fillStyle='#e2e8f0'; ctx.font='600 11px Inter'; ctx.textAlign='center'; ctx.fillText('Longitude (°E)', padL+plotW/2, H-12);
     ctx.save(); ctx.translate(14, padT+plotH/2); ctx.rotate(-Math.PI/2); ctx.fillText('Latitude (°N)',0,0); ctx.restore();
     if(emptyEl) emptyEl.style.display='none';
-    // table only red
+    // tables — separate for Rack and Bias (red ≥16.1 each), plus legacy single table hidden
     const redSorted = [...redPts].sort((a,b)=> b.intensity - a.intensity).slice(0,100);
+    // populate separate Rack/Bias tables if they exist (new layout)
+    const rackTableEl = document.getElementById('gk-und-rack-table');
+    const biasTableEl = document.getElementById('gk-und-bias-table');
+    const rackStatsEl = document.getElementById('gk-und-rack-stats');
+    const biasStatsEl = document.getElementById('gk-und-bias-stats');
+    const rackRed = redPts.filter(p=> Math.abs(p.rack) >= 16.1).sort((a,b)=> Math.abs(b.rack)-Math.abs(a.rack)).slice(0,60);
+    const biasRed = redPts.filter(p=> Math.abs(p.bias) >= 16.1).sort((a,b)=> Math.abs(b.bias)-Math.abs(a.bias)).slice(0,60);
+    const populateRackBiasTable = (el, arr, isRack)=>{
+      if(!el) return;
+      if(!arr.length){
+        el.innerHTML='<tr><td style="color:var(--text-muted); padding:10px; text-align:center">No red '+(isRack?'Rack':'Bias')+' ≥16.1</td></tr>';
+      } else {
+        el.innerHTML='<tr><th>#</th><th>Lat</th><th>Lon</th><th>'+(isRack?'Rack':'Bias')+'</th><th>Intensity</th><th>Time</th></tr>' +
+          arr.map((p,i)=>{
+            const v = isRack ? p.rack : p.bias;
+            const it = Math.abs(v);
+            return `<tr style="background:rgba(239,68,68,0.04)"><td>${i+1}</td><td>${p.lat.toFixed(5)}</td><td>${p.lon.toFixed(5)}</td><td>${v.toFixed(2)}</td><td><b style="color:#ef4444">${it.toFixed(2)}</b></td><td style="font-size:11px; white-space:nowrap">${p.time||''}</td></tr>`;
+          }).join('');
+      }
+    };
+    if(rackTableEl) populateRackBiasTable(rackTableEl, rackRed, true);
+    if(biasTableEl) populateRackBiasTable(biasTableEl, biasRed, false);
+    if(rackStatsEl) rackStatsEl.textContent = `Rack Red: ${rackRed.length} / ${pts.filter(p=> Math.abs(p.rack)>=12).length} und`;
+    if(biasStatsEl) biasStatsEl.textContent = `Bias Red: ${biasRed.length} / ${pts.filter(p=> Math.abs(p.bias)>=12).length} und`;
+    // legacy single table (hidden, kept for backward compat)
     if(tableEl){
       if(!redSorted.length){
         tableEl.innerHTML='<tr><td style="color:var(--text-muted); padding:16px; text-align:center">No red undulation points (≥16.1) — road is within spec.</td></tr>';
@@ -1118,7 +1202,7 @@ window.VIEWS = {
       }
     }
     if(statsEl){
-      statsEl.innerHTML=`Red ≥16.1: <b style="color:#ef4444">${redPts.length}</b> / ${pts.length} pts (${(redPts.length/pts.length*100).toFixed(1)}%) · Green 12.0–16.1: <b style="color:#10b981">${greenPts.length}</b> · Max intensity <b>${Math.max(...pts.map(p=>p.intensity)).toFixed(2)}</b>`;
+      statsEl.innerHTML=`Red ≥16.1: <b style="color:#ef4444">${redPts.length}</b> / ${pts.length} pts (${(redPts.length/pts.length*100).toFixed(1)}%) · Green 12.0–16.1: <b style="color:#10b981">${greenPts.length}</b> · Max intensity <b>${Math.max(...pts.map(p=>p.intensity)).toFixed(2)}</b> · Rack Red <b>${rackRed.length}</b> · Bias Red <b>${biasRed.length}</b>`;
     }
     // tooltip
     const ptsProjected = pts.map(p=>{ const [x,y]=project(p.lat,p.lon); return {x,y,p}; });
