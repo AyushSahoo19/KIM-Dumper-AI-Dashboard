@@ -768,6 +768,8 @@ window.VIEWS = {
     if(!window._gkMap){
       window._gkMap = L.map('gk-map', { zoomControl:true }).setView([21.946,85.383], 14);
       window._gkLayers = { tile:null, kml:[] };
+    } else {
+      setTimeout(()=> window._gkMap.invalidateSize(), 180);
     }
     const map = window._gkMap;
     const base = (basemapSel && basemapSel.value) || 'satellite';
@@ -782,21 +784,18 @@ window.VIEWS = {
     // clear previous KML
     window._gkLayers.kml.forEach(l=> map.removeLayer(l)); window._gkLayers.kml=[];
     
-    const kmlCandidates = [
-      'data/august-8/KIM_August8_Gradient_08_08_2026.kml',
-      '../data/august-8/KIM_August8_Gradient_08_08_2026.kml',
-      '../../data/august-8/KIM_August8_Gradient_08_08_2026.kml',
-      '/data/august-8/KIM_August8_Gradient_08_08_2026.kml',
-      'KIM_Export_Bundle Gradient Analysis/Output_August8/KIM_August8_Gradient_08_08_2026.kml',
-      '../KIM_Export_Bundle Gradient Analysis/Output_August8/KIM_August8_Gradient_08_08_2026.kml',
-      '../../KIM_Export_Bundle Gradient Analysis/Output_August8/KIM_August8_Gradient_08_08_2026.kml',
-      'August%208%20data/Output/KIM_August8_Gradient_08_08_2026.kml',
-      '../August%208%20data/Output/KIM_August8_Gradient_08_08_2026.kml'
-    ];
+    // Vercel-safe single URL (no 404 spam) — data is now duplicated at fleet-dashboard/data/august-8/ for both Root=fleet-dashboard and Root=.
     let kmlText=null, kmlUrl=null;
+    const kmlSingleUrl = new URL('data/august-8/KIM_August8_Gradient_08_08_2026.kml', window.location.href).href;
+    const kmlCandidates = [
+      kmlSingleUrl,
+      new URL('../data/august-8/KIM_August8_Gradient_08_08_2026.kml', window.location.href).href,
+      new URL('/data/august-8/KIM_August8_Gradient_08_08_2026.kml', window.location.origin + '/').href,
+      'KIM_Export_Bundle Gradient Analysis/Output_August8/KIM_August8_Gradient_08_08_2026.kml'
+    ];
     for(const url of kmlCandidates){
       try{
-        const res = await fetch(url);
+        const res = await fetch(url, {cache:'no-store'});
         if(!res.ok) continue;
         const txt = await res.text();
         if(txt && txt.includes('<kml')){

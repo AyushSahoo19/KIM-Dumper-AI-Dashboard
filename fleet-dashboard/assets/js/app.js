@@ -267,21 +267,13 @@ function initApp() {
     });
   }
   
-  // 6. Try auto-ingest August 8 prototype CSV — Vercel-safe (no-space path first) + legacy encoded fallback
+  // 6. Try auto-ingest August 8 prototype CSV — single Vercel-safe URL (no 404 spam), no-space path
   const tryAutoIngestAugust = async ()=>{
-    const candidates = [
-      'data/august-8/RD20260808151024-HD785-7-N10706.csv',
-      '../data/august-8/RD20260808151024-HD785-7-N10706.csv',
-      '../../data/august-8/RD20260808151024-HD785-7-N10706.csv',
-      '/data/august-8/RD20260808151024-HD785-7-N10706.csv',
-      '../../August%208%20data/RD20260808151024-HD785-7-N10706.csv',
-      '../August%208%20data/RD20260808151024-HD785-7-N10706.csv',
-      'August%208%20data/RD20260808151024-HD785-7-N10706.csv',
-      '/August%208%20data/RD20260808151024-HD785-7-N10706.csv'
-    ];
+    const csvUrl = new URL('data/august-8/RD20260808151024-HD785-7-N10706.csv', window.location.href).href;
+    const candidates = [ csvUrl, new URL('../data/august-8/RD20260808151024-HD785-7-N10706.csv', window.location.href).href, '/data/august-8/RD20260808151024-HD785-7-N10706.csv' ];
     for(const url of candidates){
       try{
-        const res = await fetch(url);
+        const res = await fetch(url, {cache:'no-store'});
         if(!res.ok) continue;
         const text = await res.text();
         const r = DataStore.ingest('RD20260808151024-HD785-7-N10706.csv', 'RD20260808151024-HD785-7-N10706.csv', text);
