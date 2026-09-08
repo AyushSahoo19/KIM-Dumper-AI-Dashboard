@@ -633,6 +633,30 @@ window.VIEWS = {
       });
       window._gmapDumpStats = {dumpTotal, dumpAbove, dumpBelow: dumpTotal-dumpAbove};
     }
+    // undulation dots — Rack/Bias intensity, green ≥12 / red ≥16.1, via gm-und checkbox
+    const undChk = document.getElementById('gm-und');
+    if(!undChk || undChk.checked){
+      const undPoints = valid.filter(r=>{
+        const rack = parseFloat(r.Rack ?? r.rack ?? r['Rack'] ?? 0);
+        const bias = parseFloat(r.Bias ?? r.bias ?? r['Bias'] ?? 0);
+        const intensity = Math.max(Math.abs(rack), Math.abs(bias));
+        return intensity >= 12.0;
+      });
+      undPoints.forEach(r=>{
+        const rack = parseFloat(r.Rack ?? r.rack ?? 0);
+        const bias = parseFloat(r.Bias ?? r.bias ?? 0);
+        const intensity = Math.max(Math.abs(rack), Math.abs(bias));
+        const col = intensity >= 16.1 ? '#ef4444' : '#10b981';
+        const rad = intensity >= 16.1 ? 6 : 4;
+        const c = L.circleMarker([r.lat, r.lon], { radius: rad, fillColor: col, color: '#fff', weight: 1.5, fillOpacity: 0.88 });
+        c.bindPopup(`<div style="font:12px Inter"><b style="color:${col}">Undulation ${intensity.toFixed(2)} ${intensity>=16.1?'🔴 Red ≥16.1':'🟢 Green ≥12.0'}</b><br>Rack ${rack.toFixed(2)} · Bias ${bias.toFixed(2)}<br>Time ${r.time||''}<br><span style="color:#64748b">${r.lat.toFixed(5)},${r.lon.toFixed(5)}</span></div>`);
+        c.bindTooltip(`${intensity.toFixed(1)} ${intensity>=16.1?'🔴':''}`, {direction:'top'});
+        c.addTo(map); window._gmapLayers.markers.push(c);
+      });
+      window._gmapUndStats = {total: undPoints.length, red: undPoints.filter(r=> Math.max(Math.abs(parseFloat(r.Rack ?? r.rack ?? 0)), Math.abs(parseFloat(r.Bias ?? r.bias ?? 0)))>=16.1).length};
+    } else {
+      window._gmapUndStats = {total:0, red:0};
+    }
     // start/end
     const start = valid[0], end = valid[valid.length-1];
     const sM = L.divIcon({ className:'', html:'<div style="background:#10b981;color:#fff;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:700 11px Inter;border:2px solid #0f172a;box-shadow:0 2px 8px rgba(0,0,0,0.4)">S</div>', iconSize:[22,22], iconAnchor:[11,11] });
@@ -657,19 +681,27 @@ window.VIEWS = {
     } else {
       legendEl.innerHTML=`<span class="legend-item"><span class="legend-box" style="background:#38bdf8"></span> &lt;5 km/h</span><span class="legend-item"><span class="legend-box" style="background:#f59e0b"></span> 5-12</span><span class="legend-item"><span class="legend-box" style="background:#10b981"></span> &gt;12 km/h</span>`;
     }
-    // append dumping RPM legend (always)
+    // append dumping RPM legend (always) + undulation legend
     legendEl.innerHTML += `<span class="legend-item" style="margin-left:12px; border-left:1px solid var(--card-border); padding-left:12px"><span style="width:12px;height:12px;background:#10b981; border:1px solid #fff; transform:rotate(45deg); display:inline-block"></span> Dump ≤700</span><span class="legend-item"><span style="width:12px;height:12px;background:#ef4444; border:1px solid #fff; transform:rotate(45deg); display:inline-block"></span> Dump >700</span>`;
+    const _undTotal = (typeof window._gmapUndStats !== 'undefined' && window._gmapUndStats) ? window._gmapUndStats.total : 0;
+    const _undRed = (typeof window._gmapUndStats !== 'undefined' && window._gmapUndStats) ? window._gmapUndStats.red : 0;
+    if(_undTotal>0 || (document.getElementById('gm-und') && document.getElementById('gm-und').checked)){
+      legendEl.innerHTML += `<span class="legend-item" style="margin-left:12px; border-left:1px solid var(--card-border); padding-left:12px"><span style="width:10px;height:10px;background:#10b981; border:1px solid #fff; border-radius:50%; display:inline-block"></span> Und Green ≥12</span><span class="legend-item"><span style="width:10px;height:10px;background:#ef4444; border:1px solid #fff; border-radius:50%; display:inline-block"></span> Und Red ≥16.1</span>`;
+    }
     const avgFuel = valid.reduce((s,r)=>s+(r.fuel||0)/10,0)/valid.length;
     const maxFuel = Math.max(...valid.map(r=> (r.fuel||0)/10));
     const avgSpd = valid.reduce((s,r)=>s+(r.gps||0),0)/valid.length;
     const dumpInfo = (typeof dumpTotal!=='undefined' && dumpTotal>0) ? ` · Dumping <b>${dumpTotal}</b> pts (<span style="color:#10b981">${dumpTotal-dumpAbove} ≤700</span> · <span style="color:#ef4444">${dumpAbove} >700</span> ${dumpAbove? `— <b style="color:#ef4444">${(dumpAbove/dumpTotal*100).toFixed(1)}% over` : ''}</span>)` : ` · Dumping <b>0</b> pts`;
-    document.getElementById('gm-stats').innerHTML=`GPS points <b>${valid.length}</b> · Avg fuel <b>${avgFuel.toFixed(1)} L/h</b> · Max <b style="color:${maxFuel>160?'var(--danger)':''}">${maxFuel.toFixed(1)} L/h</b> · Avg speed <b>${avgSpd.toFixed(1)} km/h</b> · Hotspots &gt;120 L/h: <b>${hotspots.length}</b>${dumpInfo}`;
+    const undInfo = (_undTotal>0) ? ` · Undulation <b>${_undTotal}</b> pts (<span style="color:#10b981">${_undTotal-_undRed} Green</span> · <span style="color:#ef4444">${_undRed} Red</span>)` : '';
+    document.getElementById('gm-stats').innerHTML=`GPS points <b>${valid.length}</b> · Avg fuel <b>${avgFuel.toFixed(1)} L/h</b> · Max <b style="color:${maxFuel>160?'var(--danger)':''}">${maxFuel.toFixed(1)} L/h</b> · Avg speed <b>${avgSpd.toFixed(1)} km/h</b> · Hotspots &gt;120 L/h: <b>${hotspots.length}</b>${dumpInfo}${undInfo}`;
     // controls bind once
     if(!this._gmapBound){
       this._gmapBound=true;
       if(modeSel) modeSel.addEventListener('change', ()=> this.renderGmap());
       if(baseSel) baseSel.addEventListener('change', ()=> this.renderGmap());
       if(heatChk) heatChk.addEventListener('change', ()=> this.renderGmap());
+      const undChk2 = document.getElementById('gm-und');
+      if(undChk2 && !undChk2._bound){ undChk2._bound=true; undChk2.addEventListener('change', ()=> this.renderGmap()); }
       // dumping via main View filter (no checkbox) — mode change already triggers renderGmap
       if(fitBtn) fitBtn.addEventListener('click', ()=>{ map.fitBounds(bounds.pad(0.12)); });
       if(playBtn) playBtn.addEventListener('click', ()=>{
