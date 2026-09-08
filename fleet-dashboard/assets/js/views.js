@@ -647,9 +647,30 @@ window.VIEWS = {
       });
       window._gmapDumpStats = {dumpTotal, dumpAbove, dumpBelow: dumpTotal-dumpAbove};
     }
-    // undulation dots — via View filter (exclusive, no overlap) — only when View is Undulation
+    // undulation — continuous trace (violet) + green transparent for small undulation within limit (exclusive view)
     const isUndMode = mode==='und' || mode==='undRed';
     if(isUndMode){
+      // continuous trace of dumper movement — violet transparent base (entire valid path)
+      if(valid.length>1){
+        const traceCoords = valid.map(r=>[r.lat,r.lon]);
+        const baseTrace = L.polyline(traceCoords, {color:'#8b5cf6', weight:5, opacity:0.28, lineCap:'round', lineJoin:'round'});
+        baseTrace.addTo(map); window._gmapLayers.segments.push(baseTrace);
+      }
+      // small undulation within limit (12.0–16.1) — green transparent continuous segments
+      const smallUndSegments = [];
+      for(let i=1;i<valid.length;i++){
+        const a=valid[i-1], b=valid[i];
+        const itA=Math.max(Math.abs(parseFloat(a.Rack??a.rack??0)), Math.abs(parseFloat(a.Bias??a.bias??0)));
+        const itB=Math.max(Math.abs(parseFloat(b.Rack??b.rack??0)), Math.abs(parseFloat(b.Bias??b.bias??0)));
+        const avgIt=(itA+itB)/2;
+        if(avgIt>=12.0 && avgIt<16.1){
+          smallUndSegments.push([[a.lat,a.lon],[b.lat,b.lon]]);
+        }
+      }
+      smallUndSegments.forEach(seg=>{
+        const greenSeg = L.polyline(seg, {color:'#10b981', weight:5, opacity:0.52, lineCap:'round', lineJoin:'round'});
+        greenSeg.addTo(map); window._gmapLayers.segments.push(greenSeg);
+      });
       const allUndPoints = valid.filter(r=>{
         const rack = parseFloat(r.Rack ?? r.rack ?? r['Rack'] ?? 0);
         const bias = parseFloat(r.Bias ?? r.bias ?? r['Bias'] ?? 0);
@@ -1011,7 +1032,27 @@ window.VIEWS = {
     for(let i=1;i<4;i++){ const gx=padL+plotW*i/4, gy=padT+plotH*i/4; ctx.beginPath(); ctx.moveTo(gx,padT); ctx.lineTo(gx,padT+plotH); ctx.stroke(); ctx.beginPath(); ctx.moveTo(padL,gy); ctx.lineTo(padL+plotW,gy); ctx.stroke(); }
     ctx.strokeStyle='#334155'; ctx.lineWidth=1.2; ctx.strokeRect(padL,padT,plotW,plotH);
     const project=(lat,lon)=>[padL+(lon-minLon)/lonSpan*plotW, padT+plotH-(lat-minLat)/latSpan*plotH];
-    // draw all points faint, then red on top, then green
+    // continuous trace — violet transparent base + green transparent for small undulation within limit (12–16.1)
+    if(pts.length>1){
+      // base violet path for entire trace
+      ctx.strokeStyle='rgba(139,92,246,0.28)'; ctx.lineWidth=3.5; ctx.lineCap='round'; ctx.lineJoin='round';
+      ctx.beginPath();
+      const [sx,sy]=project(pts[0].lat, pts[0].lon);
+      ctx.moveTo(sx,sy);
+      for(let i=1;i<pts.length;i++){ const [x,y]=project(pts[i].lat, pts[i].lon); ctx.lineTo(x,y); }
+      ctx.stroke();
+      // green transparent segments for small undulation within limit
+      for(let i=1;i<pts.length;i++){
+        const a=pts[i-1], b=pts[i];
+        const avgInt=(a.intensity+b.intensity)/2;
+        if(avgInt>=12.0 && avgInt<16.1){
+          const [x1,y1]=project(a.lat,a.lon), [x2,y2]=project(b.lat,b.lon);
+          ctx.strokeStyle='rgba(16,185,129,0.55)'; ctx.lineWidth=4.2;
+          ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+        }
+      }
+    }
+    // draw all points faint, then red on top, then green (dots on top of continuous path)
     pts.forEach(p=>{
       const [x,y]=project(p.lat,p.lon);
       let col='#1e293b';
