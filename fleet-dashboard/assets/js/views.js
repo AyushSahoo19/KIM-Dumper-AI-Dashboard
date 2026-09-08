@@ -569,8 +569,17 @@ window.VIEWS = {
       if(f<30) return '#10b981'; if(f<60) return '#84cc16'; if(f<90) return '#f59e0b'; if(f<120) return '#f97316'; if(f<160) return '#ef4444'; return '#7f1d1d';
     };
     const speedToColor = (s)=>{ if(s<5) return '#38bdf8'; if(s<12) return '#f59e0b'; return '#10b981'; };
-    // draw segments
-    const _pathValidG = (mode==='dumpRpm' || mode==='dumpAbove' || mode==='dumpBelow') ? _gmapDisplayValid : valid;
+    // draw segments — EXCLUSIVE per View (no overlap)
+    let _pathValidG = valid;
+    if(mode==='dumpRpm' || mode==='dumpAbove' || mode==='dumpBelow') _pathValidG = _gmapDisplayValid;
+    else if(mode==='und' || mode==='undRed'){
+      const _undForPath = valid.filter(r=> {
+        const it=Math.max(Math.abs(parseFloat(r.Rack ?? r.rack ?? 0)), Math.abs(parseFloat(r.Bias ?? r.bias ?? 0)));
+        if(mode==='undRed') return it>=16.1;
+        return it>=12.0;
+      });
+      _pathValidG = _undForPath.length ? _undForPath : [];
+    }
     for(let i=1;i<_pathValidG.length;i++){
       const a=_pathValidG[i-1], b=_pathValidG[i];
       const fuelAct = ((a.fuel||0)/10 + (b.fuel||0)/10)/2;
@@ -582,8 +591,9 @@ window.VIEWS = {
       seg.addTo(map); window._gmapLayers.segments.push(seg);
     }
     // heat dots — respect dumping filter when in dumping mode (show only dumping dots)
-    const _dotsValidG = (mode==='dumpRpm' || mode==='dumpAbove' || mode==='dumpBelow') ? _gmapDisplayValid : valid;
-    if(heatChk && heatChk.checked){
+    const _isUndModeForDots = mode==='und' || mode==='undRed';
+    const _dotsValidG = (mode==='dumpRpm' || mode==='dumpAbove' || mode==='dumpBelow') ? _gmapDisplayValid : (_isUndModeForDots ? [] : valid);
+    if(!_isUndModeForDots && heatChk && heatChk.checked){
       _dotsValidG.forEach(r=>{
         const fuelAct=(r.fuel||0)/10, spd=r.gps||0;
         const col = mode==='speed' ? speedToColor(spd) : fuelToColor(fuelAct);
@@ -633,15 +643,17 @@ window.VIEWS = {
       });
       window._gmapDumpStats = {dumpTotal, dumpAbove, dumpBelow: dumpTotal-dumpAbove};
     }
-    // undulation dots — Rack/Bias intensity, green ≥12 / red ≥16.1, via gm-und checkbox
-    const undChk = document.getElementById('gm-und');
-    if(!undChk || undChk.checked){
-      const undPoints = valid.filter(r=>{
+    // undulation dots — via View filter (exclusive, no overlap) — only when View is Undulation
+    const isUndMode = mode==='und' || mode==='undRed';
+    if(isUndMode){
+      const allUndPoints = valid.filter(r=>{
         const rack = parseFloat(r.Rack ?? r.rack ?? r['Rack'] ?? 0);
         const bias = parseFloat(r.Bias ?? r.bias ?? r['Bias'] ?? 0);
         const intensity = Math.max(Math.abs(rack), Math.abs(bias));
         return intensity >= 12.0;
       });
+      let undPoints = allUndPoints;
+      if(mode==='undRed') undPoints = allUndPoints.filter(r=> Math.max(Math.abs(parseFloat(r.Rack ?? r.rack ?? 0)), Math.abs(parseFloat(r.Bias ?? r.bias ?? 0))) >= 16.1);
       undPoints.forEach(r=>{
         const rack = parseFloat(r.Rack ?? r.rack ?? 0);
         const bias = parseFloat(r.Bias ?? r.bias ?? 0);
@@ -653,9 +665,9 @@ window.VIEWS = {
         c.bindTooltip(`${intensity.toFixed(1)} ${intensity>=16.1?'🔴':''}`, {direction:'top'});
         c.addTo(map); window._gmapLayers.markers.push(c);
       });
-      window._gmapUndStats = {total: undPoints.length, red: undPoints.filter(r=> Math.max(Math.abs(parseFloat(r.Rack ?? r.rack ?? 0)), Math.abs(parseFloat(r.Bias ?? r.bias ?? 0)))>=16.1).length};
+      window._gmapUndStats = {total: undPoints.length, red: undPoints.filter(r=> Math.max(Math.abs(parseFloat(r.Rack ?? r.rack ?? 0)), Math.abs(parseFloat(r.Bias ?? r.bias ?? 0)))>=16.1).length, green: undPoints.filter(r=> {const it=Math.max(Math.abs(parseFloat(r.Rack||0)),Math.abs(parseFloat(r.Bias||0))); return it>=12 && it<16.1;}).length};
     } else {
-      window._gmapUndStats = {total:0, red:0};
+      window._gmapUndStats = {total:0, red:0, green:0};
     }
     // start/end
     const start = valid[0], end = valid[valid.length-1];
@@ -676,24 +688,35 @@ window.VIEWS = {
     setTimeout(()=> map.invalidateSize(), 120);
     // legend + stats
     const legendEl = document.getElementById('gm-legend');
+    // EXCLUSIVE legend per View (no overlap)
     if(mode==='fuel'){
       legendEl.innerHTML=`<span class="legend-item"><span class="legend-box" style="background:#10b981"></span> &lt;30</span><span class="legend-item"><span class="legend-box" style="background:#84cc16"></span> 30-60</span><span class="legend-item"><span class="legend-box" style="background:#f59e0b"></span> 60-90</span><span class="legend-item"><span class="legend-box" style="background:#f97316"></span> 90-120</span><span class="legend-item"><span class="legend-box" style="background:#ef4444"></span> 120-160</span><span class="legend-item"><span class="legend-box" style="background:#7f1d1d"></span> &gt;160 L/h</span>`;
-    } else {
+    } else if(mode==='speed'){
       legendEl.innerHTML=`<span class="legend-item"><span class="legend-box" style="background:#38bdf8"></span> &lt;5 km/h</span><span class="legend-item"><span class="legend-box" style="background:#f59e0b"></span> 5-12</span><span class="legend-item"><span class="legend-box" style="background:#10b981"></span> &gt;12 km/h</span>`;
+    } else if(mode==='dumpRpm' || mode==='dumpAbove' || mode==='dumpBelow'){
+      legendEl.innerHTML=`<span class="legend-item"><span style="width:12px;height:12px;background:#10b981; border:1px solid #fff; transform:rotate(45deg); display:inline-block"></span> Dump ≤700</span><span class="legend-item"><span style="width:12px;height:12px;background:#ef4444; border:1px solid #fff; transform:rotate(45deg); display:inline-block"></span> Dump >700</span>`;
+    } else if(mode==='und' || mode==='undRed'){
+      legendEl.innerHTML=`<span class="legend-item"><span style="width:10px;height:10px;background:#10b981; border:1px solid #fff; border-radius:50%; display:inline-block"></span> Und Green ≥12.0</span><span class="legend-item"><span style="width:10px;height:10px;background:#ef4444; border:1px solid #fff; border-radius:50%; display:inline-block"></span> Und Red ≥16.1</span>`;
+    } else {
+      legendEl.innerHTML=`<span class="legend-item"><span class="legend-box" style="background:#10b981"></span> &lt;30</span>`;
     }
-    // append dumping RPM legend (always) + undulation legend
-    legendEl.innerHTML += `<span class="legend-item" style="margin-left:12px; border-left:1px solid var(--card-border); padding-left:12px"><span style="width:12px;height:12px;background:#10b981; border:1px solid #fff; transform:rotate(45deg); display:inline-block"></span> Dump ≤700</span><span class="legend-item"><span style="width:12px;height:12px;background:#ef4444; border:1px solid #fff; transform:rotate(45deg); display:inline-block"></span> Dump >700</span>`;
-    const _undTotal = (typeof window._gmapUndStats !== 'undefined' && window._gmapUndStats) ? window._gmapUndStats.total : 0;
-    const _undRed = (typeof window._gmapUndStats !== 'undefined' && window._gmapUndStats) ? window._gmapUndStats.red : 0;
-    if(_undTotal>0 || (document.getElementById('gm-und') && document.getElementById('gm-und').checked)){
-      legendEl.innerHTML += `<span class="legend-item" style="margin-left:12px; border-left:1px solid var(--card-border); padding-left:12px"><span style="width:10px;height:10px;background:#10b981; border:1px solid #fff; border-radius:50%; display:inline-block"></span> Und Green ≥12</span><span class="legend-item"><span style="width:10px;height:10px;background:#ef4444; border:1px solid #fff; border-radius:50%; display:inline-block"></span> Und Red ≥16.1</span>`;
+    // EXCLUSIVE stats per View (no overlap)
+    let statsHtml = '';
+    if(mode==='und' || mode==='undRed'){
+      const undTotal2 = (typeof window._gmapUndStats!=='undefined' && window._gmapUndStats) ? window._gmapUndStats.total : 0;
+      const undRed2 = (typeof window._gmapUndStats!=='undefined' && window._gmapUndStats) ? window._gmapUndStats.red : 0;
+      const undGreen = undTotal2 - undRed2;
+      statsHtml = `Undulation <b>${undTotal2}</b> pts (<span style="color:#10b981">${undGreen} Green ≥12.0</span> · <span style="color:#ef4444">${undRed2} Red ≥16.1</span> ${undRed2? `— <b style="color:#ef4444">${(undRed2/undTotal2*100).toFixed(1)}% red` : ''}</span>) · GPS points <b>${valid.length}</b>`;
+    } else if(mode==='dumpRpm' || mode==='dumpAbove' || mode==='dumpBelow'){
+      const dumpInfo2 = (typeof dumpTotal!=='undefined' && dumpTotal>0) ? `Dumping <b>${dumpTotal}</b> pts (<span style="color:#10b981">${dumpTotal-dumpAbove} ≤700</span> · <span style="color:#ef4444">${dumpAbove} >700</span> ${dumpAbove? `— <b style="color:#ef4444">${(dumpAbove/dumpTotal*100).toFixed(1)}% over` : ''}</span>)` : `Dumping <b>0</b> pts`;
+      statsHtml = `${dumpInfo2} · GPS points <b>${valid.length}</b>`;
+    } else {
+      const avgFuel = valid.reduce((s,r)=>s+(r.fuel||0)/10,0)/valid.length;
+      const maxFuel = Math.max(...valid.map(r=> (r.fuel||0)/10));
+      const avgSpd = valid.reduce((s,r)=>s+(r.gps||0),0)/valid.length;
+      statsHtml = `GPS points <b>${valid.length}</b> · Avg fuel <b>${avgFuel.toFixed(1)} L/h</b> · Max <b style="color:${maxFuel>160?'var(--danger)':''}">${maxFuel.toFixed(1)} L/h</b> · Avg speed <b>${avgSpd.toFixed(1)} km/h</b> · Hotspots &gt;120 L/h: <b>${hotspots.length}</b>`;
     }
-    const avgFuel = valid.reduce((s,r)=>s+(r.fuel||0)/10,0)/valid.length;
-    const maxFuel = Math.max(...valid.map(r=> (r.fuel||0)/10));
-    const avgSpd = valid.reduce((s,r)=>s+(r.gps||0),0)/valid.length;
-    const dumpInfo = (typeof dumpTotal!=='undefined' && dumpTotal>0) ? ` · Dumping <b>${dumpTotal}</b> pts (<span style="color:#10b981">${dumpTotal-dumpAbove} ≤700</span> · <span style="color:#ef4444">${dumpAbove} >700</span> ${dumpAbove? `— <b style="color:#ef4444">${(dumpAbove/dumpTotal*100).toFixed(1)}% over` : ''}</span>)` : ` · Dumping <b>0</b> pts`;
-    const undInfo = (_undTotal>0) ? ` · Undulation <b>${_undTotal}</b> pts (<span style="color:#10b981">${_undTotal-_undRed} Green</span> · <span style="color:#ef4444">${_undRed} Red</span>)` : '';
-    document.getElementById('gm-stats').innerHTML=`GPS points <b>${valid.length}</b> · Avg fuel <b>${avgFuel.toFixed(1)} L/h</b> · Max <b style="color:${maxFuel>160?'var(--danger)':''}">${maxFuel.toFixed(1)} L/h</b> · Avg speed <b>${avgSpd.toFixed(1)} km/h</b> · Hotspots &gt;120 L/h: <b>${hotspots.length}</b>${dumpInfo}${undInfo}`;
+    document.getElementById('gm-stats').innerHTML=statsHtml;
     // controls bind once
     if(!this._gmapBound){
       this._gmapBound=true;
