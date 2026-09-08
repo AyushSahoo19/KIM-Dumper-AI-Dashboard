@@ -883,7 +883,11 @@ window.VIEWS = {
       statsEl.innerHTML=`Segments: <b>${climbCount} climbs</b> · <b>${flatCount} flats</b> · <b>${bumpCount} bumps</b> · Total length ~<b>${(totalDist/1000).toFixed(2)} km</b> · Points: ${allCoords.length}`;
     }
     // also render undulation (Rack/Bias) in same section — same date/dumper
-    this.renderGkUndulation(rows);
+    try{
+      const _rows = this._getAnalyticsRows(this.currentDate, this.currentDumper);
+      const _effRows = _rows.length ? _rows : this._syntheticAugustRows();
+      this.renderGkUndulation(_effRows);
+    }catch(e){ console.warn('renderGkUndulation failed', e); }
     // bind controls once
     if(!this._gkBound){
       this._gkBound=true;
