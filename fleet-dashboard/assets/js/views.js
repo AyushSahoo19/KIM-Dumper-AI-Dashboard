@@ -647,13 +647,25 @@ window.VIEWS = {
       });
       window._gmapDumpStats = {dumpTotal, dumpAbove, dumpBelow: dumpTotal-dumpAbove};
     }
-    // undulation — continuous trace (navy) + green for small within limit — separate for Rack/Bias when filtered
+    // undulation — continuous trace (navy) + green for small within limit — EXCLUSIVE per Rack/Bias filter (no other param)
     const isUndMode = mode==='und' || mode==='undRed' || mode==='rack' || mode==='rackRed' || mode==='bias' || mode==='biasRed';
     if(isUndMode){
-      // continuous trace of dumper movement — navy transparent base (entire valid path)
-      if(valid.length>1){
-        const traceCoords = valid.map(r=>[r.lat,r.lon]);
-        const baseTrace = L.polyline(traceCoords, {color:'#1e3a8a', weight:5, opacity:0.28, lineCap:'round', lineJoin:'round'});
+      // continuous trace — ONLY undulation points for the selected filter (no other param), to avoid overlap
+      let tracePoints = valid.filter(r=>{
+        const rack = parseFloat(r.Rack ?? r.rack ?? 0);
+        const bias = parseFloat(r.Bias ?? r.bias ?? 0);
+        let it;
+        if(mode==='rack' || mode==='rackRed') it = Math.abs(rack);
+        else if(mode==='bias' || mode==='biasRed') it = Math.abs(bias);
+        else it = Math.max(Math.abs(rack), Math.abs(bias));
+        // for trace, show all undulation points (≥12) for that filter, not just red
+        return it >= 12.0;
+      });
+      // if no undulation points for that filter, fallback to not drawing base trace
+      const traceForBase = tracePoints.length ? tracePoints : [];
+      if(traceForBase.length>1){
+        const traceCoords = traceForBase.map(r=>[r.lat,r.lon]);
+        const baseTrace = L.polyline(traceCoords, {color:'#1e3a8a', weight:5, opacity:0.32, lineCap:'round', lineJoin:'round'});
         baseTrace.addTo(map); window._gmapLayers.segments.push(baseTrace);
       }
       // small undulation within limit (12.0–16.1) — green transparent continuous segments (filtered per Rack/Bias if needed)
@@ -765,11 +777,31 @@ window.VIEWS = {
             }).join('');
         }
       };
+      // EXCLUSIVE: in separate Rack/Bias view, hide the other column (no other param)
+      const rackCol = document.getElementById('gm-und-rack-col');
+      const biasCol = document.getElementById('gm-und-bias-col');
+      const gridEl = document.getElementById('gm-und-tables-grid');
+      if(isRackMode){
+        if(rackCol) rackCol.style.display='block';
+        if(biasCol) biasCol.style.display='none';
+        if(gridEl) gridEl.style.gridTemplateColumns='1fr';
+      } else if(isBiasMode){
+        if(rackCol) rackCol.style.display='none';
+        if(biasCol) biasCol.style.display='block';
+        if(gridEl) gridEl.style.gridTemplateColumns='1fr';
+      } else {
+        if(rackCol) rackCol.style.display='block';
+        if(biasCol) biasCol.style.display='block';
+        if(gridEl) gridEl.style.gridTemplateColumns='1fr 1fr';
+      }
       if(rackTableEl && biasTableEl){
         populateTable(rackTableEl, rackRed, true);
         populateTable(biasTableEl, biasRed, false);
         if(rackStatsEl) rackStatsEl.textContent = `Rack Red: ${rackRed.length} / ${undPoints.filter(r=> Math.abs(parseFloat(r.Rack??0))>=12).length} und`;
         if(biasStatsEl) biasStatsEl.textContent = `Bias Red: ${biasRed.length} / ${undPoints.filter(r=> Math.abs(parseFloat(r.Bias??0))>=12).length} und`;
+        // hide/show stats as well
+        if(rackStatsEl) rackStatsEl.parentElement.style.display = isBiasMode ? 'none' : 'block';
+        if(biasStatsEl) biasStatsEl.parentElement.style.display = isRackMode ? 'none' : 'block';
       }
       if(undTable){
         if(!redForTableAll.length){
@@ -1084,15 +1116,26 @@ window.VIEWS = {
     const tableEl = document.getElementById('gk-und-table');
     const statsEl = document.getElementById('gk-und-stats');
     const metaEl = document.getElementById('gk-und-meta');
+    const filterEl = document.getElementById('gk-und-filter');
+    const filterVal = filterEl ? filterEl.value : 'all';
     if(!canvas || !wrap) return;
-    // filter rows with valid Rack/Bias and GPS
-    const pts = rows.map(r=>{
+    // filter rows with valid Rack/Bias and GPS — exclusive per Rack/Bias filter (no other param)
+    let ptsAll = rows.map(r=>{
       const rack = parseFloat(r['Rack'] ?? r['rack'] ?? r['Rack'] ?? 0);
       const bias = parseFloat(r['Bias'] ?? r['bias'] ?? 0);
       const lat = r.lat, lon = r.lon;
-      const intensity = Math.max(Math.abs(rack), Math.abs(bias));
+      let intensity;
+      if(filterVal==='rack' || filterVal==='rackRed') intensity = Math.abs(rack);
+      else if(filterVal==='bias' || filterVal==='biasRed') intensity = Math.abs(bias);
+      else intensity = Math.max(Math.abs(rack), Math.abs(bias));
       return {rack, bias, intensity, lat, lon, time:r.time||'', raw:r};
     }).filter(p=> isFinite(p.intensity) && p.lat!=null && p.lon!=null && isFinite(p.lat) && isFinite(p.lon));
+    // apply filter for red only
+    let pts = ptsAll;
+    if(filterVal==='rackRed') pts = ptsAll.filter(p=> Math.abs(p.rack) >= 16.1);
+    else if(filterVal==='biasRed') pts = ptsAll.filter(p=> Math.abs(p.bias) >= 16.1);
+    else if(filterVal==='rack') pts = ptsAll.filter(p=> Math.abs(p.rack) >= 12.0);
+    else if(filterVal==='bias') pts = ptsAll.filter(p=> Math.abs(p.bias) >= 12.0);
     if(!pts.length){
       if(emptyEl){ emptyEl.style.display='flex'; emptyEl.textContent='No undulation GPS points.'; }
       if(tableEl) tableEl.innerHTML='';
@@ -1168,13 +1211,42 @@ window.VIEWS = {
     if(emptyEl) emptyEl.style.display='none';
     // tables — separate for Rack and Bias (red ≥16.1 each), plus legacy single table hidden
     const redSorted = [...redPts].sort((a,b)=> b.intensity - a.intensity).slice(0,100);
-    // populate separate Rack/Bias tables if they exist (new layout)
+    // populate separate Rack/Bias tables — exclusive per filter (no other param)
     const rackTableEl = document.getElementById('gk-und-rack-table');
     const biasTableEl = document.getElementById('gk-und-bias-table');
     const rackStatsEl = document.getElementById('gk-und-rack-stats');
     const biasStatsEl = document.getElementById('gk-und-bias-stats');
-    const rackRed = redPts.filter(p=> Math.abs(p.rack) >= 16.1).sort((a,b)=> Math.abs(b.rack)-Math.abs(a.rack)).slice(0,60);
-    const biasRed = redPts.filter(p=> Math.abs(p.bias) >= 16.1).sort((a,b)=> Math.abs(b.bias)-Math.abs(a.bias)).slice(0,60);
+    const isRackFilter = filterVal==='rack' || filterVal==='rackRed';
+    const isBiasFilter = filterVal==='bias' || filterVal==='biasRed';
+    // for exclusive views, only show relevant reds; for 'all' show both
+    let rackRed, biasRed;
+    if(isRackFilter){
+      rackRed = pts.filter(p=> Math.abs(p.rack) >= 16.1).sort((a,b)=> Math.abs(b.rack)-Math.abs(a.rack)).slice(0,60);
+      biasRed = [];
+    } else if(isBiasFilter){
+      biasRed = pts.filter(p=> Math.abs(p.bias) >= 16.1).sort((a,b)=> Math.abs(b.bias)-Math.abs(a.bias)).slice(0,60);
+      rackRed = [];
+    } else {
+      rackRed = redPts.filter(p=> Math.abs(p.rack) >= 16.1).sort((a,b)=> Math.abs(b.rack)-Math.abs(a.rack)).slice(0,60);
+      biasRed = redPts.filter(p=> Math.abs(p.bias) >= 16.1).sort((a,b)=> Math.abs(b.bias)-Math.abs(a.bias)).slice(0,60);
+    }
+    // hide/show columns based on filter
+    const rackCol = document.getElementById('gk-und-rack-col');
+    const biasCol = document.getElementById('gk-und-bias-col');
+    const gridEl2 = document.getElementById('gk-und-tables-grid');
+    if(isRackFilter){
+      if(rackCol) rackCol.style.display='block';
+      if(biasCol) biasCol.style.display='none';
+      if(gridEl2) gridEl2.style.gridTemplateColumns='1fr';
+    } else if(isBiasFilter){
+      if(rackCol) rackCol.style.display='none';
+      if(biasCol) biasCol.style.display='block';
+      if(gridEl2) gridEl2.style.gridTemplateColumns='1fr';
+    } else {
+      if(rackCol) rackCol.style.display='block';
+      if(biasCol) biasCol.style.display='block';
+      if(gridEl2) gridEl2.style.gridTemplateColumns='1fr 1fr';
+    }
     const populateRackBiasTable = (el, arr, isRack)=>{
       if(!el) return;
       if(!arr.length){
@@ -1228,6 +1300,12 @@ window.VIEWS = {
       } else undTip.style.display='none';
     };
     canvas.onmouseleave=()=> undTip.style.display='none';
+    // bind filter change for exclusive Rack/Bias views
+    const filterEl2 = document.getElementById('gk-und-filter');
+    if(filterEl2 && !filterEl2._bound){
+      filterEl2._bound=true;
+      filterEl2.addEventListener('change', ()=> this.renderGkUndulation(rows));
+    }
   },
 
   _parseCoord(s){
