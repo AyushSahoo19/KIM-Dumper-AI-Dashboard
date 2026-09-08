@@ -691,8 +691,44 @@ window.VIEWS = {
         c.addTo(map); window._gmapLayers.markers.push(c);
       });
       window._gmapUndStats = {total: undPoints.length, red: undPoints.filter(r=> Math.max(Math.abs(parseFloat(r.Rack ?? r.rack ?? 0)), Math.abs(parseFloat(r.Bias ?? r.bias ?? 0)))>=16.1).length, green: undPoints.filter(r=> {const it=Math.max(Math.abs(parseFloat(r.Rack||0)),Math.abs(parseFloat(r.Bias||0))); return it>=12 && it<16.1;}).length};
+      // for red points, also show permanent value label on map (intensity)
+      undPoints.forEach(r=>{
+        const rack = parseFloat(r.Rack ?? r.rack ?? 0);
+        const bias = parseFloat(r.Bias ?? r.bias ?? 0);
+        const intensity = Math.max(Math.abs(rack), Math.abs(bias));
+        if(intensity >= 16.1){
+          const lbl = L.divIcon({className:'', html:`<div style="background:rgba(239,68,68,0.92); color:#fff; font:700 10px Inter; padding:1px 4px; border-radius:4px; border:1px solid #fff; white-space:nowrap; box-shadow:0 1px 4px rgba(0,0,0,0.45)">${intensity.toFixed(1)}</div>`, iconSize:[36,14], iconAnchor:[18, -6]});
+          const mLbl = L.marker([r.lat, r.lon], {icon: lbl, interactive:false, zIndexOffset:300});
+          mLbl.addTo(map); window._gmapLayers.markers.push(mLbl);
+        }
+      });
+      // table below map — only red points, visible only in undulation view
+      const redForTable = undPoints.filter(r=> Math.max(Math.abs(parseFloat(r.Rack ?? r.rack ?? 0)), Math.abs(parseFloat(r.Bias ?? r.bias ?? 0)))>=16.1).sort((a,b)=>{
+        const ia=Math.max(Math.abs(parseFloat(a.Rack??0)),Math.abs(parseFloat(a.Bias??0)));
+        const ib=Math.max(Math.abs(parseFloat(b.Rack??0)),Math.abs(parseFloat(b.Bias??0)));
+        return ib-ia;
+      }).slice(0,120);
+      const undTableCard = document.getElementById('gm-und-table-card');
+      const undTable = document.getElementById('gm-und-table');
+      const undTableStats = document.getElementById('gm-und-table-stats');
+      if(undTableCard) undTableCard.style.display = 'block';
+      if(undTable){
+        if(!redForTable.length){
+          undTable.innerHTML='<tr><td style="color:var(--text-muted); padding:14px; text-align:center">No red undulation points (≥16.1) for this filter — road within spec.</td></tr>';
+        } else {
+          undTable.innerHTML='<tr><th>#</th><th>Lat</th><th>Lon</th><th>Rack</th><th>Bias</th><th>Intensity</th><th>Time</th></tr>' +
+            redForTable.map((r,i)=>{
+              const rack=parseFloat(r.Rack??r.rack??0), bias=parseFloat(r.Bias??r.bias??0);
+              const it=Math.max(Math.abs(rack),Math.abs(bias));
+              return `<tr style="background:rgba(239,68,68,0.04)"><td>${i+1}</td><td>${r.lat.toFixed(5)}</td><td>${r.lon.toFixed(5)}</td><td>${rack.toFixed(2)}</td><td>${bias.toFixed(2)}</td><td><b style="color:#ef4444">${it.toFixed(2)}</b></td><td style="font-size:11px; white-space:nowrap">${r.time||''}</td></tr>`;
+            }).join('');
+        }
+      }
+      if(undTableStats) undTableStats.textContent = `Red ≥16.1: ${redForTable.length} shown (top 120 by intensity) of ${undPoints.filter(r=> Math.max(Math.abs(parseFloat(r.Rack||0)),Math.abs(parseFloat(r.Bias||0)))>=16.1).length} total red / ${undPoints.length} undulation pts`;
     } else {
       window._gmapUndStats = {total:0, red:0, green:0};
+      const undTableCard2 = document.getElementById('gm-und-table-card');
+      if(undTableCard2) undTableCard2.style.display = 'none';
     }
     // start/end
     const start = valid[0], end = valid[valid.length-1];
