@@ -30,6 +30,7 @@
     <div class="nav-label">Intelligence</div>
     <a href="#" data-section="analytics"><span class="icon">🔬</span> Analytics Lab <span class="nav-badge" style="background:#8b5cf6;display:inline-block">NEW</span></a>
     <a href="#" data-section="gmap"><span class="icon">🗺️</span> Google Map Track <span class="nav-badge" style="background:#10b981;display:inline-block">LIVE</span></a>
+    <a href="#" data-section="gradient-kml"><span class="icon">⛰️</span> Gradient KML Map <span class="nav-badge" style="background:#f59e0b;display:inline-block">NEW</span></a>
     <a href="#" data-section="alerts"><span class="icon">🚨</span> Alerts &amp; Actions <span class="nav-badge" id="nav-alert-badge">0</span></a>
     <a href="#" data-section="monthly"><span class="icon">📅</span> Monthly Reports</a>
     <a href="#" data-section="undulation"><span class="icon">🛣️</span> Undulation Monitor</a>
@@ -326,6 +327,42 @@
           <span style="font-size:11px; color:var(--text-muted); align-self:center">KML contains 3D LineString + fuel-coloured hotspots; double-click in Earth Pro to fly to haul road.</span>
         </div>
         <div style="font-size:11px; color:var(--text-sec); margin-top:10px; line-height:1.6">Earth 3D iframe uses <code>earth.google.com/web/@lat,lon,alt...a,35y,0h,60t</code> at your path centre. If iframe is blocked by Google X-Frame (shows blank), use the KML — it opens natively in <b>Google Earth Pro Desktop</b> with full terrain exaggeration and 3D build.</div>
+      </div>
+    </section>
+
+    <!-- ─── GRADIENT KML MAP — August 8 same logic as KIM_Export_Bundle ─── -->
+    <section id="sec-gradient-kml" class="section">
+      <div class="view-controls" style="flex-wrap:wrap; gap:12px">
+        <select id="gk-basemap" class="input select-sm"><option value="roadmap" selected>Roadmap</option><option value="satellite">Satellite</option><option value="hybrid">Hybrid</option><option value="terrain">Terrain</option></select>
+        <button class="btn" id="gk-fit">◎ Fit to gradient path</button>
+        <button class="btn btn-primary" id="gk-load">↻ Load August 8 KML</button>
+        <a class="btn" id="gk-download" href="#" download style="text-decoration:none">⬇ Download KML (Earth Pro)</a>
+        <span id="gk-meta" style="color:var(--text-sec); font-size:12px; margin-left:8px"></span>
+      </div>
+      <div class="card" style="padding:0; overflow:hidden;">
+        <div id="gk-map" style="width:100%; height:620px; background:#0b1220;"></div>
+      </div>
+      <div class="grid grid-2" style="margin-top:20px">
+        <div class="card">
+          <h3>Gradient Legend — Same as KIM_Export_Bundle</h3>
+          <p class="sub">Color coding from kim_combined.py: green ≤6.25% · yellow 6.25–10% · red >10% + green bumps >1m</p>
+          <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; font-size:12px">
+            <span class="legend-item"><span class="legend-box" style="background:#10b981"></span> Plan / Flat ≤6.25% (green)</span>
+            <span class="legend-item"><span class="legend-box" style="background:#f59e0b"></span> Moderate 6.25–10% (yellow)</span>
+            <span class="legend-item"><span class="legend-box" style="background:#ef4444"></span> Steep >10% (red)</span>
+            <span class="legend-item"><span class="legend-box" style="background:#10b981; border:2px dashed #fff"></span> Bump >1m (hazard)</span>
+          </div>
+          <div id="gk-stats" style="margin-top:12px; font-size:12px; color:var(--text-sec)"></div>
+        </div>
+        <div class="card">
+          <h3>How it works — Same logic as Positions Data KIM 17-18.csv</h3>
+          <p class="sub">CSV → UTM/haversine distance → gap split 150m/180s → smooth elevation (window 3) → segment by 2% grade → avg_grad coloring → bump >1m/1m</p>
+          <div style="font-size:12px; color:var(--text-sec); line-height:1.6">
+            <div>Input: <code>August 8 data/RD20260808151024-HD785-7-N10706.csv</code> — GPS lat/lon via <code>parse_coordinate</code> (N2156.4320 → decimal), altitude <code>GPS_Altitude</code>, time <code>Time</code></div>
+            <div style="margin-top:8px">Output: <code>KIM_August8_Gradient_08_08_2026.kml</code> with folders <code>Continuous Elevations / Plan Paths / Detected Bumps</code> — toggle in Google Earth</div>
+            <div style="margin-top:8px">Generator: <code>fleet-dashboard/KIM_Export_Bundle Gradient Analysis/kim_august8_gradient.py</code> — identical thresholds to <code>kim_combined.py</code></div>
+          </div>
+        </div>
       </div>
     </section>
 

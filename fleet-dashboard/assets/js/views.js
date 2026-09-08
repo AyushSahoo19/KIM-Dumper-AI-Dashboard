@@ -65,7 +65,7 @@ window.VIEWS = {
     document.getElementById('nav-alert-badge').style.display = alertCount > 0 ? 'inline-block' : 'none';
 
     // Page title
-    const titles={command:'Command Center', dumper:'Dumper 360', compare:'Fleet Comparison', undulation:'Undulation Monitor', settings:'Settings & Data', alerts:'Alerts & Actions', analytics:'Analytics Lab', monthly:'Monthly Reports', gmap:'Google Map Track'};
+    const titles={command:'Command Center', dumper:'Dumper 360', compare:'Fleet Comparison', undulation:'Undulation Monitor', settings:'Settings & Data', alerts:'Alerts & Actions', analytics:'Analytics Lab', monthly:'Monthly Reports', gmap:'Google Map Track', 'gradient-kml':'Gradient KML Map'};
     const titleEl=document.getElementById('page-title'); if(titleEl) titleEl.textContent=titles[this.activeSection]|| this.activeSection;
     // Route to renderer
     if (this.activeSection === 'command') this.renderCommand(engineData);
@@ -76,6 +76,7 @@ window.VIEWS = {
     else if (this.activeSection === 'alerts') this.renderAlerts(engineData);
     else if (this.activeSection === 'analytics') this.renderAnalytics();
     else if (this.activeSection === 'gmap') this.renderGmap();
+    else if (this.activeSection === 'gradient-kml') this.renderGradientKml();
     else if (this.activeSection === 'monthly') { const b=document.getElementById('mo-body'); if(b) b.innerHTML='<div style="color:var(--text-sec);padding:40px;text-align:center">Monthly roll-ups — available after 30-day aggregation. Use Analytics Lab for August 8 deep-dive.</div>'; }
   },
 
@@ -748,6 +749,151 @@ window.VIEWS = {
           window.open(url, '_blank');
         });
       }
+    }
+  },
+
+  async renderGradientKml(){
+    const mapEl = document.getElementById('gk-map');
+    const metaEl = document.getElementById('gk-meta');
+    const statsEl = document.getElementById('gk-stats');
+    const basemapSel = document.getElementById('gk-basemap');
+    const fitBtn = document.getElementById('gk-fit');
+    const loadBtn = document.getElementById('gk-load');
+    const dlLink = document.getElementById('gk-download');
+    if(!mapEl) return;
+    if(typeof L==='undefined'){
+      mapEl.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-sec);padding:40px;text-align:center">Leaflet failed to load.</div>';
+      return;
+    }
+    if(!window._gkMap){
+      window._gkMap = L.map('gk-map', { zoomControl:true }).setView([21.946,85.383], 14);
+      window._gkLayers = { tile:null, kml:[] };
+    }
+    const map = window._gkMap;
+    const base = (basemapSel && basemapSel.value) || 'satellite';
+    const tileUrls = {
+      roadmap: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+      satellite: 'https://mt0.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+      hybrid: 'https://mt0.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+      terrain: 'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}'
+    };
+    if(window._gkLayers.tile) map.removeLayer(window._gkLayers.tile);
+    window._gkLayers.tile = L.tileLayer(tileUrls[base] || tileUrls.satellite, { maxZoom:20, subdomains:['mt0','mt1','mt2','mt3'], attribution:'© Google' }).addTo(map);
+    // clear previous KML
+    window._gkLayers.kml.forEach(l=> map.removeLayer(l)); window._gkLayers.kml=[];
+    
+    const kmlCandidates = [
+      'data/august-8/KIM_August8_Gradient_08_08_2026.kml',
+      '../data/august-8/KIM_August8_Gradient_08_08_2026.kml',
+      '../../data/august-8/KIM_August8_Gradient_08_08_2026.kml',
+      '/data/august-8/KIM_August8_Gradient_08_08_2026.kml',
+      'KIM_Export_Bundle Gradient Analysis/Output_August8/KIM_August8_Gradient_08_08_2026.kml',
+      '../KIM_Export_Bundle Gradient Analysis/Output_August8/KIM_August8_Gradient_08_08_2026.kml',
+      '../../KIM_Export_Bundle Gradient Analysis/Output_August8/KIM_August8_Gradient_08_08_2026.kml',
+      'August%208%20data/Output/KIM_August8_Gradient_08_08_2026.kml',
+      '../August%208%20data/Output/KIM_August8_Gradient_08_08_2026.kml'
+    ];
+    let kmlText=null, kmlUrl=null;
+    for(const url of kmlCandidates){
+      try{
+        const res = await fetch(url);
+        if(!res.ok) continue;
+        const txt = await res.text();
+        if(txt && txt.includes('<kml')){
+          kmlText=txt; kmlUrl=url; break;
+        }
+      }catch(e){}
+    }
+    if(!kmlText){
+      if(metaEl) metaEl.textContent='KML not found — run kim_august8_gradient.py to generate';
+      if(statsEl) statsEl.innerHTML='<span style="color:var(--warning)">No KML found at expected paths. Generate with <code>python kim_august8_gradient.py</code></span>';
+      if(dlLink){ dlLink.href='#'; dlLink.onclick=(e)=>{e.preventDefault(); VIEWS.toast('KML not found — generate first','err');}; }
+      return;
+    }
+    if(metaEl) metaEl.textContent=`Loaded ${kmlUrl} — ${kmlText.length} chars`;
+    if(dlLink){ dlLink.href = kmlUrl; dlLink.download = 'KIM_August8_Gradient_08_08_2026.kml'; }
+    // Parse KML: extract Placemarks with LineString coordinates and style
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(kmlText, 'text/xml');
+    const placemarks = doc.querySelectorAll('Placemark');
+    let totalDist=0, climbCount=0, flatCount=0, bumpCount=0;
+    const allCoords=[];
+    const styleMap = {
+      'green': '#10b981',
+      'yellow': '#f59e0b',
+      'red': '#ef4444'
+    };
+    placemarks.forEach(pm=>{
+      const name = (pm.querySelector('name')?.textContent||'').trim();
+      const folder = pm.parentNode?.parentNode?.querySelector('name')?.textContent || '';
+      const coordsEl = pm.querySelector('coordinates');
+      if(!coordsEl) return;
+      const coordsText = coordsEl.textContent.trim();
+      const coords = coordsText.split(/\s+/).map(s=>{
+        const [lon,lat,alt] = s.split(',').map(Number);
+        if(isFinite(lat) && isFinite(lon)) { allCoords.push([lat,lon]); return [lat,lon]; }
+        return null;
+      }).filter(c=>c);
+      if(coords.length<2) return;
+      // Determine color by folder/style or name
+      let color='#10b981';
+      const styleUrl = pm.querySelector('styleUrl')?.textContent||'';
+      const desc = pm.querySelector('description')?.textContent||'';
+      if(name.includes('Climb') || folder.includes('Elevations')){
+        if(desc.includes('Gradient:') ){
+          const m = desc.match(/Gradient:\s*([\d.]+)/);
+          const grad = m ? parseFloat(m[1]) : 0;
+          if(grad>10) color='#ef4444';
+          else if(grad>6.25) color='#f59e0b';
+          else color='#10b981';
+        } else {
+          color='#10b981';
+        }
+        climbCount++;
+      } else if(name.includes('BUMP') || folder.includes('Bumps')){
+        color='#10b981'; bumpCount++;
+      } else {
+        color='#10b981'; flatCount++;
+      }
+      // Check styleUrl for color hint
+      if(styleUrl.includes('red')) color='#ef4444';
+      else if(styleUrl.includes('yellow')) color='#f59e0b';
+      else if(styleUrl.includes('green')) color='#10b981';
+
+      const poly = L.polyline(coords, { color:color, weight:4, opacity:0.92 });
+      poly.bindPopup(`<b>${name}</b><br><span style="color:var(--text-sec)">${folder}</span><br>${desc.replace(/\n/g,'<br>')}`);
+      poly.addTo(map); window._gkLayers.kml.push(poly);
+      // accumulate distance for stats if needed
+      for(let i=1;i<coords.length;i++){
+        const d = (()=>{
+          const R=6371000, p1=coords[i-1], p2=coords[i];
+          const phi1=p1[0]*Math.PI/180, phi2=p2[0]*Math.PI/180;
+          const dphi=(p2[0]-p1[0])*Math.PI/180, dl=(p2[1]-p1[1])*Math.PI/180;
+          const a=Math.sin(dphi/2)**2 + Math.cos(phi1)*Math.cos(phi2)*Math.sin(dl/2)**2;
+          return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+        })();
+        totalDist+=d;
+      }
+    });
+    if(allCoords.length){
+      const bounds = L.latLngBounds(allCoords);
+      map.fitBounds(bounds.pad(0.12));
+      setTimeout(()=> map.invalidateSize(), 150);
+    }
+    if(statsEl){
+      statsEl.innerHTML=`Segments: <b>${climbCount} climbs</b> · <b>${flatCount} flats</b> · <b>${bumpCount} bumps</b> · Total length ~<b>${(totalDist/1000).toFixed(2)} km</b> · Points: ${allCoords.length}`;
+    }
+    // bind controls once
+    if(!this._gkBound){
+      this._gkBound=true;
+      if(basemapSel) basemapSel.addEventListener('change', ()=> this.renderGradientKml());
+      if(fitBtn) fitBtn.addEventListener('click', ()=>{
+        if(allCoords.length){
+          const b = L.latLngBounds(allCoords);
+          map.fitBounds(b.pad(0.12));
+        }
+      });
+      if(loadBtn) loadBtn.addEventListener('click', ()=> this.renderGradientKml());
     }
   },
 
