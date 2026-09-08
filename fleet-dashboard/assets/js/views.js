@@ -647,44 +647,39 @@ window.VIEWS = {
       });
       window._gmapDumpStats = {dumpTotal, dumpAbove, dumpBelow: dumpTotal-dumpAbove};
     }
-    // undulation — continuous trace (navy) + green for small within limit — EXCLUSIVE per Rack/Bias filter (no other param)
+    // undulation — ONLY red points + transparent continuous path (navy + green) — no other data (exclusive, no overlap)
     const isUndMode = mode==='und' || mode==='undRed' || mode==='rack' || mode==='rackRed' || mode==='bias' || mode==='biasRed';
     if(isUndMode){
-      // continuous trace — ONLY undulation points for the selected filter (no other param), to avoid overlap
+      // continuous trace — ONLY red undulation points' path per filter (no other param), navy base + green small within limit
       let tracePoints = valid.filter(r=>{
-        const rack = parseFloat(r.Rack ?? r.rack ?? 0);
-        const bias = parseFloat(r.Bias ?? r.bias ?? 0);
         let it;
-        if(mode==='rack' || mode==='rackRed') it = Math.abs(rack);
-        else if(mode==='bias' || mode==='biasRed') it = Math.abs(bias);
-        else it = Math.max(Math.abs(rack), Math.abs(bias));
-        // for trace, show all undulation points (≥12) for that filter, not just red
-        return it >= 12.0;
+        if(mode==='rack' || mode==='rackRed') it = Math.abs(parseFloat(r.Rack ?? r.rack ?? 0));
+        else if(mode==='bias' || mode==='biasRed') it = Math.abs(parseFloat(r.Bias ?? r.bias ?? 0));
+        else it = Math.max(Math.abs(parseFloat(r.Rack ?? r.rack ?? 0)), Math.abs(parseFloat(r.Bias ?? r.bias ?? 0)));
+        return it >= 16.1; // only red for trace in this view
       });
-      // if no undulation points for that filter, fallback to not drawing base trace
-      const traceForBase = tracePoints.length ? tracePoints : [];
-      if(traceForBase.length>1){
-        const traceCoords = traceForBase.map(r=>[r.lat,r.lon]);
+      // fallback: if no red for that filter, show nothing (no base trace) to keep view clean
+      if(tracePoints.length>1){
+        const traceCoords = tracePoints.map(r=>[r.lat,r.lon]);
         const baseTrace = L.polyline(traceCoords, {color:'#1e3a8a', weight:5, opacity:0.32, lineCap:'round', lineJoin:'round'});
         baseTrace.addTo(map); window._gmapLayers.segments.push(baseTrace);
       }
-      // small undulation within limit (12.0–16.1) — green transparent continuous segments (filtered per Rack/Bias if needed)
-      const smallUndSegments = [];
-      for(let i=1;i<valid.length;i++){
-        const a=valid[i-1], b=valid[i];
-        let itA, itB;
-        if(mode==='rack' || mode==='rackRed'){ itA=Math.abs(parseFloat(a.Rack??a.rack??0)); itB=Math.abs(parseFloat(b.Rack??b.rack??0)); }
-        else if(mode==='bias' || mode==='biasRed'){ itA=Math.abs(parseFloat(a.Bias??a.bias??0)); itB=Math.abs(parseFloat(b.Bias??b.bias??0)); }
-        else { itA=Math.max(Math.abs(parseFloat(a.Rack??a.rack??0)), Math.abs(parseFloat(a.Bias??a.bias??0))); itB=Math.max(Math.abs(parseFloat(b.Rack??b.rack??0)), Math.abs(parseFloat(b.Bias??b.bias??0))); }
-        const avgIt=(itA+itB)/2;
-        if(avgIt>=12.0 && avgIt<16.1){
-          smallUndSegments.push([[a.lat,a.lon],[b.lat,b.lon]]);
+      // small undulation within limit (12.0–16.1) — green transparent — ONLY for und/rack/bias (not Red-only views)
+      if(mode==='und' || mode==='rack' || mode==='bias'){
+        const smallUndPoints = valid.filter(r=>{
+          let it;
+          if(mode==='rack') it=Math.abs(parseFloat(r.Rack??r.rack??0));
+          else if(mode==='bias') it=Math.abs(parseFloat(r.Bias??r.bias??0));
+          else it=Math.max(Math.abs(parseFloat(r.Rack??r.rack??0)), Math.abs(parseFloat(r.Bias??r.bias??0)));
+          return it>=12.0 && it<16.1;
+        });
+        // draw small undulation as continuous green transparent path connecting those points in time order
+        if(smallUndPoints.length>1){
+          const smallCoords = smallUndPoints.map(r=>[r.lat,r.lon]);
+          const greenTrace = L.polyline(smallCoords, {color:'#10b981', weight:5, opacity:0.52, lineCap:'round', lineJoin:'round'});
+          greenTrace.addTo(map); window._gmapLayers.segments.push(greenTrace);
         }
       }
-      smallUndSegments.forEach(seg=>{
-        const greenSeg = L.polyline(seg, {color:'#10b981', weight:5, opacity:0.52, lineCap:'round', lineJoin:'round'});
-        greenSeg.addTo(map); window._gmapLayers.segments.push(greenSeg);
-      });
       const allUndPoints = valid.filter(r=>{
         const rack = parseFloat(r.Rack ?? r.rack ?? r['Rack'] ?? 0);
         const bias = parseFloat(r.Bias ?? r.bias ?? r['Bias'] ?? 0);
@@ -692,18 +687,9 @@ window.VIEWS = {
         if(mode==='rack' || mode==='rackRed') intensity = Math.abs(rack);
         else if(mode==='bias' || mode==='biasRed') intensity = Math.abs(bias);
         else intensity = Math.max(Math.abs(rack), Math.abs(bias));
-        return intensity >= 12.0;
+        return intensity >= 16.1; // only red for dots in this exclusive view
       });
       let undPoints = allUndPoints;
-      if(mode==='undRed' || mode==='rackRed' || mode==='biasRed'){
-        undPoints = allUndPoints.filter(r=>{
-          let it;
-          if(mode==='rackRed') it=Math.abs(parseFloat(r.Rack??r.rack??0));
-          else if(mode==='biasRed') it=Math.abs(parseFloat(r.Bias??r.bias??0));
-          else it=Math.max(Math.abs(parseFloat(r.Rack ?? r.rack ?? 0)), Math.abs(parseFloat(r.Bias ?? r.bias ?? 0)));
-          return it >= 16.1;
-        });
-      }
       undPoints.forEach(r=>{
         let rack = parseFloat(r.Rack ?? r.rack ?? 0);
         let bias = parseFloat(r.Bias ?? r.bias ?? 0);
@@ -821,22 +807,39 @@ window.VIEWS = {
       const undTableCard2 = document.getElementById('gm-und-table-card');
       if(undTableCard2) undTableCard2.style.display = 'none';
     }
-    // start/end
-    const start = valid[0], end = valid[valid.length-1];
-    const sM = L.divIcon({ className:'', html:'<div style="background:#10b981;color:#fff;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:700 11px Inter;border:2px solid #0f172a;box-shadow:0 2px 8px rgba(0,0,0,0.4)">S</div>', iconSize:[22,22], iconAnchor:[11,11] });
-    const eM = L.divIcon({ className:'', html:'<div style="background:#3b82f6;color:#fff;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:700 11px Inter;border:2px solid #0f172a;box-shadow:0 2px 8px rgba(0,0,0,0.4)">E</div>', iconSize:[22,22], iconAnchor:[11,11] });
-    const mS = L.marker([start.lat,start.lon], {icon:sM}).bindPopup(`Start<br>${start.lat.toFixed(5)},${start.lon.toFixed(5)}<br>${start.time||''}`); mS.addTo(map); window._gmapLayers.markers.push(mS);
-    const mE = L.marker([end.lat,end.lon], {icon:eM}).bindPopup(`End<br>${end.lat.toFixed(5)},${end.lon.toFixed(5)}<br>${end.time||''}`); mE.addTo(map); window._gmapLayers.markers.push(mE);
-    // hotspot markers for high burn >120 L/h
-    const hotspots = valid.filter(r=> (r.fuel||0)/10 > 120).slice(0,6);
-    hotspots.forEach(r=>{
-      const hm = L.circleMarker([r.lat,r.lon], { radius:9, fillColor:'#ef4444', color:'#fff', weight:2, fillOpacity:0.18 });
-      hm.bindPopup(`<b style="color:#ef4444">High burn ${(r.fuel/10).toFixed(0)} L/h</b><br>Speed ${r.gps.toFixed(1)} km/h<br>${r.lat.toFixed(5)},${r.lon.toFixed(5)}<br>${r.time||''}`);
-      hm.addTo(map); window._gmapLayers.markers.push(hm);
-    });
-    // fit bounds
-    const bounds = L.latLngBounds(valid.map(r=>[r.lat,r.lon]));
-    map.fitBounds(bounds.pad(0.12));
+    // start/end + hotspots — EXCLUSIVE: hide in undulation view (only red undulation + path)
+    if(!isUndMode){
+      const start = valid[0], end = valid[valid.length-1];
+      if(start && end){
+        const sM = L.divIcon({ className:'', html:'<div style="background:#10b981;color:#fff;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:700 11px Inter;border:2px solid #0f172a;box-shadow:0 2px 8px rgba(0,0,0,0.4)">S</div>', iconSize:[22,22], iconAnchor:[11,11] });
+        const eM = L.divIcon({ className:'', html:'<div style="background:#3b82f6;color:#fff;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:700 11px Inter;border:2px solid #0f172a;box-shadow:0 2px 8px rgba(0,0,0,0.4)">E</div>', iconSize:[22,22], iconAnchor:[11,11] });
+        const mS = L.marker([start.lat,start.lon], {icon:sM}).bindPopup(`Start<br>${start.lat.toFixed(5)},${start.lon.toFixed(5)}<br>${start.time||''}`); mS.addTo(map); window._gmapLayers.markers.push(mS);
+        const mE = L.marker([end.lat,end.lon], {icon:eM}).bindPopup(`End<br>${end.lat.toFixed(5)},${end.lon.toFixed(5)}<br>${end.time||''}`); mE.addTo(map); window._gmapLayers.markers.push(mE);
+      }
+      // hotspot markers for high burn >120 L/h — only in fuel/speed/dumping views
+      const hotspots = valid.filter(r=> (r.fuel||0)/10 > 120).slice(0,6);
+      hotspots.forEach(r=>{
+        const hm = L.circleMarker([r.lat,r.lon], { radius:9, fillColor:'#ef4444', color:'#fff', weight:2, fillOpacity:0.18 });
+        hm.bindPopup(`<b style="color:#ef4444">High burn ${(r.fuel/10).toFixed(0)} L/h</b><br>Speed ${r.gps.toFixed(1)} km/h<br>${r.lat.toFixed(5)},${r.lon.toFixed(5)}<br>${r.time||''}`);
+        hm.addTo(map); window._gmapLayers.markers.push(hm);
+      });
+    }
+    // fit bounds — for undulation, fit to red undulation points (exclusive view)
+    let _fitPoints = valid;
+    if(isUndMode){
+      const _undForFit = valid.filter(r=>{
+        let it;
+        if(mode==='rack' || mode==='rackRed') it=Math.abs(parseFloat(r.Rack??r.rack??0));
+        else if(mode==='bias' || mode==='biasRed') it=Math.abs(parseFloat(r.Bias??r.bias??0));
+        else it=Math.max(Math.abs(parseFloat(r.Rack??r.rack??0)), Math.abs(parseFloat(r.Bias??r.bias??0)));
+        return mode.includes('Red') ? it>=16.1 : it>=12.0;
+      });
+      if(_undForFit.length) _fitPoints = _undForFit;
+    } else if(mode==='dumpRpm' || mode==='dumpAbove' || mode==='dumpBelow'){
+      _fitPoints = _gmapDisplayValid.length ? _gmapDisplayValid : valid;
+    }
+    const bounds = L.latLngBounds(_fitPoints.map(r=>[r.lat,r.lon]));
+    if(_fitPoints.length) map.fitBounds(bounds.pad(0.12));
     setTimeout(()=> map.invalidateSize(), 120);
     // legend + stats
     const legendEl = document.getElementById('gm-legend');
@@ -878,7 +881,27 @@ window.VIEWS = {
       const undChk2 = document.getElementById('gm-und');
       if(undChk2 && !undChk2._bound){ undChk2._bound=true; undChk2.addEventListener('change', ()=> this.renderGmap()); }
       // dumping via main View filter (no checkbox) — mode change already triggers renderGmap
-      if(fitBtn) fitBtn.addEventListener('click', ()=>{ map.fitBounds(bounds.pad(0.12)); });
+      if(fitBtn) fitBtn.addEventListener('click', ()=>{
+        // recompute fit bounds based on current View (exclusive, no overlap) — undulation uses undulation points
+        const curMode = (document.getElementById('gm-mode') && document.getElementById('gm-mode').value) || mode;
+        let fitPts = valid;
+        if(curMode==='und' || curMode==='undRed' || curMode==='rack' || curMode==='rackRed' || curMode==='bias' || curMode==='biasRed'){
+          const undForFit = valid.filter(r=>{
+            let it;
+            if(curMode==='rack' || curMode==='rackRed') it=Math.abs(parseFloat(r.Rack??r.rack??0));
+            else if(curMode==='bias' || curMode==='biasRed') it=Math.abs(parseFloat(r.Bias??r.bias??0));
+            else it=Math.max(Math.abs(parseFloat(r.Rack??r.rack??0)),Math.abs(parseFloat(r.Bias??r.bias??0)));
+            return curMode.includes('Red') ? it>=16.1 : it>=12.0;
+          });
+          if(undForFit.length) fitPts = undForFit;
+        } else if(curMode==='dumpRpm' || curMode==='dumpAbove' || curMode==='dumpBelow'){
+          fitPts = _gmapDisplayValid.length ? _gmapDisplayValid : valid;
+        }
+        if(fitPts.length){
+          const b = L.latLngBounds(fitPts.map(r=>[r.lat,r.lon]));
+          map.fitBounds(b.pad(0.12));
+        }
+      });
       if(playBtn) playBtn.addEventListener('click', ()=>{
         let idx=0; const total=valid.length; playBtn.disabled=true; playBtn.textContent='⏳ Playing...';
         const poly = L.polyline([], {color:'#f59e0b', weight:4, opacity:0.9}).addTo(map); window._gmapLayers.segments.push(poly);
