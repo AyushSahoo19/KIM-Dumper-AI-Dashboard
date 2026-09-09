@@ -618,6 +618,7 @@ window.VIEWS = {
     let _dumpShown=0, _dumpShownAbove=0;
     if(showDump){
       // build cycle index for tooltip cycle # (consecutive hoist>0)
+      window._gmapDumpHighRevs = []; // Array to store high RPM dumps for the table
       const dumpCyclesTmp=[]; let curTmp=null;
       effRows.forEach(r=>{
         const isDump = parseFloat(r.hoist)>0.5;
@@ -637,8 +638,19 @@ window.VIEWS = {
           dumpTotal++;
           const isAbove = _isAboveTmp;
           if(isAbove) dumpAbove++;
-          const col = isAbove ? '#ef4444' : '#10b981';
           const cycleNum = rowToCycle.get(effRows.find(er=> er.lat===r.lat && er.lon===r.lon && er.time===r.time)) || rowToCycle.get(r) || 0;
+          
+          if(r.rpm > 650) {
+            window._gmapDumpHighRevs.push({
+              time: r.time,
+              rpm: r.rpm,
+              lat: r.lat,
+              lon: r.lon,
+              cycle: cycleNum
+            });
+          }
+          
+          const col = isAbove ? '#ef4444' : '#10b981';
           // use diamond via divIcon for dumping to stand out over heat dots
           const iconHtml = `<div style="background:${col}; width:14px; height:14px; transform:rotate(45deg); border:2px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center"><span style="transform:rotate(-45deg); font:700 7px Inter; color:#fff">${r.rpm>999? Math.round(r.rpm/100): r.rpm>700?'!':''}</span></div>`;
           const dIcon = L.divIcon({ className:'', html: iconHtml, iconSize:[14,14], iconAnchor:[7,7] });
@@ -811,6 +823,39 @@ window.VIEWS = {
       const undTableCard2 = document.getElementById('gm-und-table-card');
       if(undTableCard2) undTableCard2.style.display = 'none';
     }
+
+    // Toggle and populate Dumping table
+    const dumpTableCard = document.getElementById('gm-dump-table-card');
+    const dumpTable = document.getElementById('gm-dump-table');
+    const dumpStats = document.getElementById('gm-dump-stats');
+    if(showDump) {
+      if(dumpTableCard) dumpTableCard.style.display = 'block';
+      if(dumpTable) {
+        if(!window._gmapDumpHighRevs || window._gmapDumpHighRevs.length === 0) {
+          dumpTable.innerHTML = '<tr><td style="color:var(--text-muted); padding:14px; text-align:center">No dumping events with > 650 RPM found.</td></tr>';
+        } else {
+          // Sort by RPM descending
+          const sortedDumps = window._gmapDumpHighRevs.sort((a,b) => b.rpm - a.rpm);
+          const dumperName = document.getElementById('gm-dumper') ? document.getElementById('gm-dumper').value : 'Unknown';
+          
+          dumpTable.innerHTML = '<tr><th>Time</th><th>Dumper</th><th>RPM</th><th>Lat, Lon</th></tr>' +
+            sortedDumps.map((d, i) => {
+              return `<tr style="background:rgba(239,68,68,0.04)">
+                <td style="font-size:11px; white-space:nowrap">${d.time || ''}</td>
+                <td>${dumperName}</td>
+                <td><b style="color:#ef4444">${d.rpm}</b></td>
+                <td>${d.lat.toFixed(5)}, ${d.lon.toFixed(5)}</td>
+              </tr>`;
+            }).join('');
+        }
+      }
+      if(dumpStats && window._gmapDumpHighRevs) {
+        dumpStats.textContent = `High Rev Events (>650 RPM): ${window._gmapDumpHighRevs.length}`;
+      }
+    } else {
+      if(dumpTableCard) dumpTableCard.style.display = 'none';
+    }
+
     // start/end + hotspots — EXCLUSIVE: hide in undulation view (only red undulation + path)
     let hotspots = [];
     if(!isUndMode){
