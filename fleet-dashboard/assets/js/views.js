@@ -584,7 +584,7 @@ window.VIEWS = {
       _pathValidG = _undForPath.length ? _undForPath : [];
     }
     // For undulation mode, don't connect dots — only view undulation points (no path)
-    const _isUndModeForPath = mode==='und' || mode==='undRed';
+    const _isUndModeForPath = mode==='und' || mode==='undRed' || mode==='rack' || mode==='rackRed' || mode==='bias' || mode==='biasRed';
     if(!_isUndModeForPath){
       for(let i=1;i<_pathValidG.length;i++){
         const a=_pathValidG[i-1], b=_pathValidG[i];
@@ -598,7 +598,7 @@ window.VIEWS = {
       }
     }
     // heat dots — respect dumping filter when in dumping mode (show only dumping dots)
-    const _isUndModeForDots = mode==='und' || mode==='undRed';
+    const _isUndModeForDots = _isUndModeForPath;
     const _dotsValidG = (mode==='dumpRpm' || mode==='dumpAbove' || mode==='dumpBelow') ? _gmapDisplayValid : (_isUndModeForDots ? [] : valid);
     if(!_isUndModeForDots && heatChk && heatChk.checked){
       _dotsValidG.forEach(r=>{
@@ -653,6 +653,36 @@ window.VIEWS = {
     // undulation — ONLY red points + transparent continuous path (navy + green) — no other data (exclusive, no overlap)
     const isUndMode = mode==='und' || mode==='undRed' || mode==='rack' || mode==='rackRed' || mode==='bias' || mode==='biasRed';
     if(isUndMode){
+      // Base navy trace for entire dumper movement
+      if(valid.length>1){
+        const allCoords = valid.map(r=>[r.lat,r.lon]);
+        const baseTrace = L.polyline(allCoords, {color:'#1e3a8a', weight:4, opacity:0.35, lineCap:'round', lineJoin:'round'});
+        baseTrace.addTo(map); window._gmapLayers.segments.push(baseTrace);
+      }
+      
+      // Green trace for moderate undulation (12-16.1)
+      const greenSegments = [];
+      let currentSeg = [];
+      for(let i=0; i<valid.length; i++){
+        const r = valid[i];
+        let intensity;
+        if(mode==='rack' || mode==='rackRed') intensity = Math.abs(parseFloat(r.Rack ?? r.rack ?? 0));
+        else if(mode==='bias' || mode==='biasRed') intensity = Math.abs(parseFloat(r.Bias ?? r.bias ?? 0));
+        else intensity = Math.max(Math.abs(parseFloat(r.Rack ?? r.rack ?? 0)), Math.abs(parseFloat(r.Bias ?? r.bias ?? 0)));
+        
+        if(intensity >= 12.0 && intensity < 16.1){
+          currentSeg.push([r.lat, r.lon]);
+        } else {
+          if(currentSeg.length > 1) greenSegments.push(currentSeg);
+          currentSeg = [];
+        }
+      }
+      if(currentSeg.length > 1) greenSegments.push(currentSeg);
+      
+      greenSegments.forEach(seg => {
+        const greenTrace = L.polyline(seg, {color:'#10b981', weight:4.5, opacity:0.55, lineCap:'round', lineJoin:'round'});
+        greenTrace.addTo(map); window._gmapLayers.segments.push(greenTrace);
+      });
 
       const allUndPoints = valid.filter(r=>{
         const rack = parseFloat(r.Rack ?? r.rack ?? r['Rack'] ?? 0);
@@ -1154,10 +1184,11 @@ window.VIEWS = {
       return {rack, bias, intensity, lat, lon, time:r.time||'', raw:r};
     }).filter(p=> isFinite(p.intensity) && p.lat!=null && p.lon!=null && isFinite(p.lat) && isFinite(p.lon));
     // apply filter for red only
+    // apply filter for red only table and dots, BUT KEEP ALL POINTS FOR TRACES
     let pts = ptsAll;
-    if(filterVal==='rackRed' || filterVal==='rack') pts = ptsAll.filter(p=> Math.abs(p.rack) >= 16.1);
-    else if(filterVal==='biasRed' || filterVal==='bias') pts = ptsAll.filter(p=> Math.abs(p.bias) >= 16.1);
-    if(!pts.length){
+    
+    // We will draw traces using ptsAll, and dots using pts
+    if(!ptsAll.length){
       if(emptyEl){ emptyEl.style.display='flex'; emptyEl.textContent='No undulation GPS points.'; }
       if(tableEl) tableEl.innerHTML='';
       if(statsEl) statsEl.textContent='';
@@ -1191,17 +1222,52 @@ window.VIEWS = {
     for(let i=1;i<4;i++){ const gx=padL+plotW*i/4, gy=padT+plotH*i/4; ctx.beginPath(); ctx.moveTo(gx,padT); ctx.lineTo(gx,padT+plotH); ctx.stroke(); ctx.beginPath(); ctx.moveTo(padL,gy); ctx.lineTo(padL+plotW,gy); ctx.stroke(); }
     ctx.strokeStyle='#334155'; ctx.lineWidth=1.2; ctx.strokeRect(padL,padT,plotW,plotH);
     const project=(lat,lon)=>[padL+(lon-minLon)/lonSpan*plotW, padT+plotH-(lat-minLat)/latSpan*plotH];
+    
+    // continuous trace — navy transparent base + green transparent for small undulation within limit (12–16.1)
+    if(ptsAll.length>1){
+      // base navy path for entire trace
+      ctx.strokeStyle='rgba(30,58,138,0.35)'; ctx.lineWidth=3.8; ctx.lineCap='round'; ctx.lineJoin='round';
+      ctx.beginPath();
+      const [sx,sy]=project(ptsAll[0].lat, ptsAll[0].lon);
+      ctx.moveTo(sx,sy);
+      for(let i=1;i<ptsAll.length;i++){ const [x,y]=project(ptsAll[i].lat, ptsAll[i].lon); ctx.lineTo(x,y); }
+      ctx.stroke();
+      
+      // green transparent segments for small undulation within limit
+      for(let i=1;i<ptsAll.length;i++){
+        const a=ptsAll[i-1], b=ptsAll[i];
+        let aInt, bInt;
+        if(filterVal === 'rack') { aInt = Math.abs(a.rack); bInt = Math.abs(b.rack); }
+        else if(filterVal === 'bias') { aInt = Math.abs(a.bias); bInt = Math.abs(b.bias); }
+        else { aInt = a.intensity; bInt = b.intensity; }
+        
+        const avgInt=(aInt+bInt)/2;
+        if(avgInt>=12.0 && avgInt<16.1){
+          const [x1,y1]=project(a.lat,a.lon), [x2,y2]=project(b.lat,b.lon);
+          ctx.strokeStyle='rgba(16,185,129,0.55)'; ctx.lineWidth=4.2;
+          ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+        }
+      }
+    }
 
-    // draw all points faint, then red on top, then green (dots on top of continuous path)
-    pts.forEach(p=>{
+    // draw dots: only red points if in rack or bias filter
+    let dots = ptsAll;
+    if(filterVal === 'rack') dots = ptsAll.filter(p => Math.abs(p.rack) >= 16.1);
+    else if(filterVal === 'bias') dots = ptsAll.filter(p => Math.abs(p.bias) >= 16.1);
+
+    dots.forEach(p=>{
       const [x,y]=project(p.lat,p.lon);
+      let intensity = p.intensity;
+      if(filterVal === 'rack') intensity = Math.abs(p.rack);
+      else if(filterVal === 'bias') intensity = Math.abs(p.bias);
+      
       let col='#1e293b';
-      if(p.intensity >= 16.1) col='#ef4444';
-      else if(p.intensity >= 12.0) col='#10b981';
+      if(intensity >= 16.1) col='#ef4444';
+      else if(intensity >= 12.0) col='#10b981';
       else col='rgba(51,65,85,0.55)';
-      const r = p.intensity >=16.1 ? 4.5 : p.intensity>=12.0 ? 3.5 : 2.2;
+      const r = intensity >=16.1 ? 4.5 : intensity>=12.0 ? 3.5 : 2.2;
       ctx.fillStyle=col; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
-      if(p.intensity>=12.0){ ctx.strokeStyle='rgba(15,23,42,0.9)'; ctx.lineWidth=1; ctx.stroke(); }
+      if(intensity>=12.0){ ctx.strokeStyle='rgba(15,23,42,0.9)'; ctx.lineWidth=1; ctx.stroke(); }
     });
     // axes
     ctx.fillStyle='#94a3b8'; ctx.font='11px Inter, system-ui, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
