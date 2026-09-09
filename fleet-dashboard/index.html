@@ -302,6 +302,31 @@
           <div><b style="color:var(--text)">Google Earth Web requires internet.</b><br>Your KML has been downloaded — double-click to open in <b>Google Earth Pro Desktop</b> for full 3D terrain.<br><br><span style="font-size:11px; color:var(--text-muted)">Tip: In Earth Pro, enable <code>Terrain → 3D</code> and tilt with middle-mouse for haul road profile.</span></div>
         </div>
       </div>
+      <!-- Fuel x Speed heat map — bound to the Colour by Fuel / Colour by Speed filters -->
+      <div class="card" id="gm-fs-heat-card" style="margin-top:20px; padding:24px 28px; display:none;">
+        <div style="display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:12px">
+          <div style="min-width:260px">
+            <h3>Diesel vs Speed — Heat Map <span id="gm-heat-mode-tag" style="font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; vertical-align:2px; margin-left:6px"></span></h3>
+            <p class="sub">Same points as the route above — fuel rate (actual L/h) binned against GPS speed · colour = point density · <b>click any cell</b> to ring &amp; zoom those points on the map</p>
+          </div>
+          <button class="btn" id="gm-heat-clear" style="display:none; align-self:center">✕ Clear cell selection</button>
+        </div>
+        <!-- Smooth canvas heatmap -->
+        <div style="position:relative; margin-bottom:18px;">
+          <canvas id="gm-smooth-heatmap" width="800" height="360" style="width:100%; height:360px; border-radius:10px; background:#0f172a; border:1px solid rgba(255,255,255,0.06);"></canvas>
+          <div id="gm-heat-tooltip" style="display:none; position:absolute; pointer-events:none; background:rgba(15,23,42,0.95); border:1px solid var(--card-border); border-radius:8px; padding:8px 12px; font-size:11px; color:var(--text); box-shadow:0 8px 24px rgba(0,0,0,0.5); z-index:10; white-space:nowrap;"></div>
+        </div>
+        <!-- Density color bar -->
+        <div id="gm-heat-colorbar" style="display:flex; align-items:center; gap:10px; margin-bottom:16px; font-size:11px; color:var(--text-sec)">
+          <span>Low density</span>
+          <div id="gm-heat-gradient-bar" style="flex:1; max-width:320px; height:12px; border-radius:6px; border:1px solid rgba(255,255,255,0.08)"></div>
+          <span>High density</span>
+        </div>
+        <!-- Binned grid heatmap -->
+        <div id="gm-heatmap" class="heatmap-wrap"></div>
+        <div id="gm-heatmap-legend" class="legend-row" style="margin-top:14px"></div>
+        <div id="gm-heatmap-stats" style="margin-top:14px; font-size:13px; color:var(--text-sec); padding-top:14px; border-top:1px dashed rgba(255,255,255,0.08)"></div>
+      </div>
       <div class="card" id="gm-und-table-card" style="margin-top:20px; padding:24px 28px; display:none;">
         <h3>Undulation — Red Points (≥16.1) — Coordinates & Value</h3>
         <p class="sub">Visible only when View is <b>Undulation</b> — red diamonds on map show intensity label · <b>Rack</b> and <b>Bias</b> separately</p>

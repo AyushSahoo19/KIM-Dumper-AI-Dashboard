@@ -532,8 +532,12 @@ window.VIEWS = {
     else if(mode==='dumpAbove'){ const f=_gmapDumpPoints.filter(r=> (r.rpm||0)>700); _gmapDisplayValid = f.length? f : _gmapDumpPoints; }
     else if(mode==='dumpBelow'){ const f=_gmapDumpPoints.filter(r=> (r.rpm||0)<=700); _gmapDisplayValid = f.length? f : _gmapDumpPoints; }
     if(metaEl) metaEl.textContent = valid.length ? `${valid.length} GPS points · ${fmtDate(this.currentDate)} · ${this.currentDumper? dumperName(this.currentDumper):'fleet aggregate'}` : `No GPS points for ${fmtDate(this.currentDate)} — showing synthetic corridor`;
+    const fsHeatCard = document.getElementById('gm-fs-heat-card');
+    const _isFuelSpeedMode = mode==='fuel'||mode==='speed';
+    if(_isFuelSpeedMode){ if(fsHeatCard) fsHeatCard.style.display='block'; } else if(fsHeatCard) fsHeatCard.style.display='none';
     if(typeof L==='undefined'){
       document.getElementById('gmap').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-sec);padding:40px;text-align:center">Leaflet failed to load (offline). Check CDN <code>unpkg.com/leaflet</code> is reachable.</div>';
+      if(_isFuelSpeedMode){ try{ this._renderGmapFuelSpeedHeatmap(valid, mode); }catch(e){} }
       return;
     }
     // init map once
@@ -565,6 +569,7 @@ window.VIEWS = {
     if(!valid.length){
       document.getElementById('gm-legend').innerHTML='';
       document.getElementById('gm-stats').innerHTML='<span style="color:var(--warning)">No valid Lat/Long points.</span>';
+      if(fsHeatCard) fsHeatCard.style.display='none';
       return;
     }
     // mode already defined above
@@ -877,6 +882,8 @@ window.VIEWS = {
     }
     // make hotspots available for stats even when in undulation (empty)
     window._gmapHotspots = hotspots;
+    // Fuel x Speed heat map — visible only for the Colour by Fuel / Colour by Speed filters
+    if(_isFuelSpeedMode){ try{ this._renderGmapFuelSpeedHeatmap(valid, mode); }catch(e){} }
     // fit bounds — for undulation, fit to red undulation points (exclusive view)
     let _fitPoints = valid;
     if(isUndMode){
@@ -2619,5 +2626,158 @@ window.VIEWS = {
           </div>
         </div>`;
       }).join('');
+  },
+
+  // ── Fuel x Speed heat-map helpers ─────────────────────────────────────
+  _fsHeatSpec(mode){
+    if(mode==='speed') return { label:'Speed', unit:'km/h', key:'speed', getters:{ x: r=>Math.min(15,Math.max(0,r.gps||0)), y: r=>Math.min(200,Math.max(0,(r.fuel||0)/10)) }, xBands:[0,5,12,15], yBands:[0,30,60,90,120,160,200], xLabel:'Speed', yLabel:'Fuel Rate (L/h)', fmtX:v=>v<5?`<${v+5}`:v===12?'12+':`${v}-${v+7}`, fmtY:v=>v===0?'0-30':v===200?`>${v}`:`${v}-${v+30}` };
+    return { label:'Fuel', unit:'L/h', key:'fuel', getters:{ x: r=>Math.min(200,Math.max(0,(r.fuel||0)/10)), y: r=>Math.min(15,Math.max(0,r.gps||0)) }, xBands:[0,30,60,90,120,160,200], yBands:[0,5,12,15], xLabel:'Fuel Rate (L/h)', yLabel:'Speed', fmtX:v=>v===0?'0-30':v===200?`>${v}`:`${v}-${v+30}`, fmtY:v=>v<5?`<${v+5}`:v===12?'12+':`${v}-${v+7}` };
+  },
+  _fsBinOf(v, bands){ for(let i=0;i<bands.length;i++) if(v<bands[i+1]) return i; return bands.length-1; },
+  _fsDensityColor(count, maxCount){
+    if(!count) return 'rgba(15,23,42,0.9)';
+    const t = Math.min(1, count/Math.max(1,maxCount));
+    const r=Math.round(15+224*t), g=Math.round(23+45*t*(1-t)*4), b=Math.round(42+186*(1-t));
+    return `rgb(${r},${g},${b})`;
+  },
+  _smoothHeatColor(t){
+    t = Math.max(0, Math.min(1, t));
+    const stops = [
+      { p:0,   r:15,  g:23,  b:42  },
+      { p:0.15, r:30,  g:64,  b:175 },
+      { p:0.4,  r:56,  g:189, b:248 },
+      { p:0.65, r:16,  g:185, b:129 },
+      { p:0.82, r:245, g:158, b:11  },
+      { p:1,    r:239, g:68,  b:68  }
+    ];
+    let lo=stops[0], hi=stops[stops.length-1];
+    for(let i=0;i<stops.length-1;i++){ if(t>=stops[i].p && t<=stops[i+1].p){ lo=stops[i]; hi=stops[i+1]; break; } }
+    const f=(t-lo.p)/(hi.p-lo.p||1);
+    return `rgb(${Math.round(lo.r+(hi.r-lo.r)*f)},${Math.round(lo.g+(hi.g-lo.g)*f)},${Math.round(lo.b+(hi.b-lo.b)*f)})`;
+  },
+  _renderSmoothCanvasHeatmap(rows){
+    const canvas = document.getElementById('gm-smooth-heatmap');
+    const spec = this._fsHeatSpec(document.getElementById('gm-mode')?.value);
+    if(!canvas||!spec) return;
+    let ctx;
+    try {
+      ctx = (typeof OffscreenCanvas!=='undefined')
+        ? new OffscreenCanvas(800,360).getContext('2d')
+        : document.createElement('canvas');
+      if(ctx instanceof HTMLCanvasElement){ ctx.width=800; ctx.height=360; ctx=ctx.getContext('2d'); }
+    } catch(e){ ctx = document.createElement('canvas'); ctx.width=800; ctx.height=360; ctx=ctx.getContext('2d'); }
+    const W=800, H=360, PAD=52, gW=W-PAD-20, gH=H-PAD-30;
+    ctx.clearRect(0,0,W,H);
+    const xR=spec.xBands, yR=spec.yBands;
+    const nX=xR.length-1, nY=yR.length-1;
+    const cellW=gW/nX, cellH=gH/nY;
+    const bins=new Array(nX*nY).fill(0);
+    rows.forEach(r=>{ const bx=Math.min(nX-1,this._fsBinOf(spec.getters.x(r),xR)), by=Math.min(nY-1,this._fsBinOf(spec.getters.y(r),yR)); bins[bx+by*nX]++; });
+    const maxB=Math.max(...bins,1);
+    const intensity=new Float32Array(nX*nY);
+    for(let i=0;i<bins.length;i++) intensity[i]=Math.min(1,bins[i]/maxB);
+    const blur=3;
+    const blurred=new Float32Array(nX*nY);
+    for(let by=0;by<nY;by++) for(let bx=0;bx<nX;bx++){
+      let s=0,w=0;
+      for(let dy=-blur;dy<=blur;dy++) for(let dx=-blur;dx<=blur;dx++){
+        const nx2=bx+dx, ny2=by+dy;
+        if(nx2>=0&&nx2<nX&&ny2>=0&&ny2<nY){ const d=1/(1+dx*dx+dy*dy); s+=intensity[ny2*nX+nx2]*d; w+=d; }
+      }
+      blurred[by*nX+bx]=s/w;
+    }
+    for(let by=0;by<nY;by++) for(let bx=0;bx<nX;bx++){
+      const v=blurred[by*nX+bx];
+      ctx.fillStyle=this._smoothHeatColor(v);
+      ctx.globalAlpha=0.15+v*0.82;
+      ctx.beginPath();
+      const x=PAD+bx*cellW, y=PAD+(nY-1-by)*cellH, r=Math.min(cellW,cellH)*0.38*v;
+      const cx2=x+cellW/2, cy2=y+cellH/2;
+      ctx.moveTo(cx2+r,cy2);
+      ctx.arc(cx2,cy2,r,0,Math.PI*2);
+      ctx.fill();
+      if(v>0.15){ ctx.globalAlpha=0.9; ctx.fillStyle='#fff'; ctx.font='bold 10px Inter,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(bins[by*nX+bx],cx2,cy2); }
+    }
+    ctx.globalAlpha=1;
+    ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.font='11px Inter,sans-serif'; ctx.textAlign='center';
+    for(let i=0;i<nX;i++) ctx.fillText(spec.fmtX(xR[i]),PAD+i*cellW+cellW/2,H-10);
+    ctx.save(); ctx.translate(14,PAD+gH/2); ctx.rotate(-Math.PI/2); ctx.textAlign='center'; ctx.fillText(spec.yLabel,0,0); ctx.restore();
+    ctx.fillStyle='rgba(255,255,255,0.45)'; ctx.font='11px Inter,sans-serif'; ctx.textAlign='center'; ctx.fillText(spec.xLabel,PAD+gW/2,14);
+    const bar=document.getElementById('gm-heat-gradient-bar');
+    if(bar){ let grad=''; for(let i=0;i<=20;i++) grad+=(grad?',':'')+this._smoothHeatColor(i/20)+' '+(i*5)+'%'; bar.style.background=`linear-gradient(to right,${grad})`; }
+    const tag=document.getElementById('gm-heat-mode-tag');
+    if(tag){ tag.textContent=spec.label==='Fuel'?'Colour by Fuel':'Colour by Speed'; tag.style.background=spec.label==='Fuel'?'rgba(245,158,11,0.18)':'rgba(56,189,248,0.18)'; tag.style.color=spec.label==='Fuel'?'#f59e0b':'#38bdf8'; }
+    // tooltip
+    const tip=document.getElementById('gm-heat-tooltip');
+    if(canvas&&tip){
+      canvas.onmousemove=(ev)=>{ const rect=canvas.getBoundingClientRect(); const mx=(ev.clientX-rect.left)*(W/rect.width), my=(ev.clientY-rect.top)*(H/rect.height);
+        const bx=Math.floor((mx-PAD)/cellW), by2=Math.floor((PAD+gH-my)/cellH);
+        if(bx>=0&&bx<nX&&by2>=0&&by2<nY){ const c=bins[by2*nX+bx]; tip.style.display='block'; tip.style.left=(ev.clientX-canvas.parentElement.getBoundingClientRect().left+12)+'px'; tip.style.top=(ev.clientY-canvas.parentElement.getBoundingClientRect().top-10)+'px';
+          tip.innerHTML=`<b>${spec.xLabel}: ${spec.fmtX(xR[bx])}</b><br>${spec.yLabel}: ${spec.fmtY(yR[by2])}<br><b>${c} points</b> (${(c/rows.length*100).toFixed(1)}%)`; }
+        else tip.style.display='none';
+      };
+      canvas.onmouseleave=()=>{ tip.style.display='none'; };
+    }
+  },
+  _renderGmapFuelSpeedHeatmap(rows, mode){
+    const spec=this._fsHeatSpec(mode);
+    const wrap=document.getElementById('gm-heatmap');
+    const leg=document.getElementById('gm-heatmap-legend');
+    const stats=document.getElementById('gm-heatmap-stats');
+    const clearBtn=document.getElementById('gm-heat-clear');
+    const map=window._gmap;
+    if(!wrap||!leg||!stats||!spec||!rows.length) return;
+    try{ this._renderSmoothCanvasHeatmap(rows); }catch(e){}
+    const xR=spec.xBands, yR=spec.yBands;
+    const nX=xR.length-1, nY=yR.length-1;
+    const bins=new Array(nX*nY).fill(0);
+    const pts=new Array(nX*nY);
+    for(let i=0;i<pts.length;i++) pts[i]=[];
+    rows.forEach(r=>{ const bx=Math.min(nX-1,this._fsBinOf(spec.getters.x(r),xR)), by=Math.min(nY-1,this._fsBinOf(spec.getters.y(r),yR)); const idx=bx+by*nX; bins[idx]++; pts[idx].push(r); });
+    const maxB=Math.max(...bins,1);
+    const maxCount=Math.max(...bins,1);
+    let html='<div class="hm-col-labels"><div></div>';
+    for(let i=0;i<nY;i++) html+=`<div style="font-size:10px;color:var(--text-muted);text-align:center;padding-bottom:2px">${spec.fmtY(yR[i])}–${spec.fmtY(yR[i+1]??yR[i]+1)}</div>`;
+    html+='</div>';
+    const ringLayers=[];
+    for(let by=0;by<nY;by++){
+      html+=`<div class="hm-row"><div class="hm-label">${spec.fmtX(xR[by])}–${spec.fmtX(xR[by+1]??xR[by]+1)}</div>`;
+      for(let bx=0;bx<nX;bx++){
+        const c=bins[bx+by*nX], cellPts=pts[bx+by*nX];
+        const bg=this._fsDensityColor(c,maxCount);
+        const op=c?Math.max(0.55,Math.min(1,c/maxB)):0;
+        const anom=(bx===nX-1&&by>=nY-1)||(bx>=nX-1&&by===nY-1);
+        html+=`<div class="hm-cell${c?' active':' empty'}${anom?' anom':''}" style="background:${bg};opacity:${c?op:1}" data-bx="${bx}" data-by="${by}"><span style="font-size:14px">${c||'-'}</span></div>`;
+      }
+      html+='</div>';
+    }
+    wrap.innerHTML=html;
+    leg.innerHTML=`<span class="legend-item" style="color:var(--text-sec)">Low</span>
+      <span class="legend-item"><span class="legend-box" style="background:${this._fsDensityColor(1,maxCount)}"></span></span>
+      <span class="legend-item"><span class="legend-box" style="background:${this._fsDensityColor(Math.round(maxCount*0.25),maxCount)}"></span></span>
+      <span class="legend-item"><span class="legend-box" style="background:${this._fsDensityColor(Math.round(maxCount*0.5),maxCount)}"></span></span>
+      <span class="legend-item"><span class="legend-box" style="background:${this._fsDensityColor(Math.round(maxCount*0.75),maxCount)}"></span></span>
+      <span class="legend-item"><span class="legend-box" style="background:${this._fsDensityColor(maxCount,maxCount)}"></span></span>
+      <span class="legend-item" style="color:var(--text-sec)">High</span>`;
+    const totalFuel=rows.reduce((s,r)=>s+(r.fuel||0)/10,0)/rows.length;
+    const totalSpeed=rows.reduce((s,r)=>s+(r.gps||0),0)/rows.length;
+    stats.innerHTML=`<b>${rows.length.toLocaleString()}</b> points · avg fuel <b>${totalFuel.toFixed(1)} L/h</b> · avg speed <b>${totalSpeed.toFixed(1)} km/h</b>`;
+    let selectedRing=null;
+    if(clearBtn) clearBtn.style.display='none';
+    wrap.querySelectorAll('.hm-cell.active').forEach(cell=>{
+      cell.onclick=()=>{
+        const bx=parseInt(cell.dataset.bx), by2=parseInt(cell.dataset.by);
+        const cellPts=pts[bx+by2*nX]; if(!cellPts.length) return;
+        if(selectedRing){ try{map.removeLayer(selectedRing);}catch(e){} selectedRing=null; }
+        if(clearBtn) clearBtn.style.display='none';
+        const lats=cellPts.map(p=>p.lat), lons=cellPts.map(p=>p.lon);
+        const minLat=Math.min(...lats), maxLat=Math.max(...lats), minLon=Math.min(...lons), maxLon=Math.max(...lons);
+        const pad2=0.0003;
+        const coords=[[minLat-pad2,minLon-pad2],[minLat-pad2,maxLon+pad2],[maxLat+pad2,maxLon+pad2],[maxLat+pad2,minLon-pad2],[minLat-pad2,minLon-pad2]];
+        selectedRing=L.polygon(coords,{color:'#f59e0b',weight:3,fillColor:'#f59e0b',fillOpacity:0.08,dashArray:'8 4'}).addTo(map);
+        map.fitBounds(selectedRing.getBounds().pad(0.25));
+        if(clearBtn){ clearBtn.style.display='inline-flex'; clearBtn.onclick=()=>{ try{map.removeLayer(selectedRing);}catch(e){} selectedRing=null; clearBtn.style.display='none'; }; }
+      };
+    });
   },
 };
