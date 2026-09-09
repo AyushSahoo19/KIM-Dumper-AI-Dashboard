@@ -646,7 +646,8 @@ window.VIEWS = {
               rpm: r.rpm,
               lat: r.lat,
               lon: r.lon,
-              cycle: cycleNum
+              cycle: cycleNum,
+              dumperId: r.dumperId || this.currentDumper // Add dumperId
             });
           }
           
@@ -836,13 +837,13 @@ window.VIEWS = {
         } else {
           // Sort by RPM descending
           const sortedDumps = window._gmapDumpHighRevs.sort((a,b) => b.rpm - a.rpm);
-          const dumperName = document.getElementById('gm-dumper') ? document.getElementById('gm-dumper').value : 'Unknown';
           
           dumpTable.innerHTML = '<tr><th>Time</th><th>Dumper</th><th>RPM</th><th>Lat, Lon</th></tr>' +
             sortedDumps.map((d, i) => {
+              const dName = dumperName ? dumperName(d.dumperId) : (d.dumperId || 'Unknown');
               return `<tr style="background:rgba(239,68,68,0.04)">
                 <td style="font-size:11px; white-space:nowrap">${d.time || ''}</td>
-                <td>${dumperName}</td>
+                <td>${dName}</td>
                 <td><b style="color:#ef4444">${d.rpm}</b></td>
                 <td>${d.lat.toFixed(5)}, ${d.lon.toFixed(5)}</td>
               </tr>`;
@@ -1438,7 +1439,7 @@ window.VIEWS = {
   _getAnalyticsRows(date, dumperId){
     const out=[];
     const self=this;
-    const pushFrom = (arr)=>{
+    const pushFrom = (arr, dId)=>{
       if(!arr) return;
       arr.forEach(r=>{
         const fuel = parseFloat(r['Fuel_Rate_01L'] ?? r['fuel']);
@@ -1458,16 +1459,16 @@ window.VIEWS = {
         if(lat!==null && typeof lat==='string') lat=parseFloat(lat);
         if(lon!==null && typeof lon==='string') lon=parseFloat(lon);
         if(isNaN(lat)) lat=null; if(isNaN(lon)) lon=null;
-        if(!isNaN(fuel) && !isNaN(rpm)) out.push({fuel, gps: isNaN(gps)? (isNaN(vSpd)?0:vSpd/100) : gps, rpm, grad: isNaN(grad)?0:grad, ret: isNaN(ret)?0:ret, vs, hoist, weight, lat, lon, time, Rack: isNaN(rack)?0:rack, Bias: isNaN(bias)?0:bias, rack: isNaN(rack)?0:rack, bias: isNaN(bias)?0:bias});
+        if(!isNaN(fuel) && !isNaN(rpm)) out.push({fuel, gps: isNaN(gps)? (isNaN(vSpd)?0:vSpd/100) : gps, rpm, grad: isNaN(grad)?0:grad, ret: isNaN(ret)?0:ret, vs, hoist, weight, lat, lon, time, Rack: isNaN(rack)?0:rack, Bias: isNaN(bias)?0:bias, rack: isNaN(rack)?0:rack, bias: isNaN(bias)?0:bias, dumperId: dId});
       });
     };
     if(DATA.timeseries && DATA.timeseries[date]){
-      if(dumperId && DATA.timeseries[date][dumperId]) pushFrom(DATA.timeseries[date][dumperId]);
-      else if(!dumperId){ Object.values(DATA.timeseries[date]).forEach(arr=> pushFrom(arr)); }
+      if(dumperId && DATA.timeseries[date][dumperId]) pushFrom(DATA.timeseries[date][dumperId], dumperId);
+      else if(!dumperId){ Object.entries(DATA.timeseries[date]).forEach(([dId, arr])=> pushFrom(arr, dId)); }
       else {
         // fallback any dumper that has data this date
-        const any = Object.values(DATA.timeseries[date])[0];
-        pushFrom(any);
+        const firstEntry = Object.entries(DATA.timeseries[date])[0];
+        if (firstEntry) pushFrom(firstEntry[1], firstEntry[0]);
       }
     }
     return out;
@@ -1498,11 +1499,11 @@ window.VIEWS = {
       if(rnd()<0.04) { rack = (rnd()<0.5? -1:1)*(16.5 + rnd()*6); bias=(rnd()-0.5)*4; }
       else if(rnd()<0.12) { rack=(rnd()-0.5)*8; bias=(rnd()<0.5? -1:1)*(12.5 + rnd()*3); }
       if(rnd()<0.02) bias = (rnd()<0.5? -1:1)*(17 + rnd()*5);
-      rows.push({fuel, gps, rpm, grad, ret, vs:vsPick, hoist, weight: rnd()*100, lat, lon, time:`syn-${i}`, Rack:rack, Bias:bias, rack, bias});
+      rows.push({fuel, gps, rpm, grad, ret, vs:vsPick, hoist, weight: rnd()*100, lat, lon, time:`syn-${i}`, Rack:rack, Bias:bias, rack, bias, dumperId: this.currentDumper || 'DMP-27'});
     }
-    for(let i=0;i<24;i++) rows.push({fuel:600+rnd()*400, gps:1+rnd()*2, rpm:1650+rnd()*350, grad: (rnd()-0.5)*2, ret:0, vs:'5', hoist:'4', weight: 30+rnd()*10, lat:C.from.lat+latSpan*0.62+(rnd()-0.5)*0.0006, lon:C.from.lon+lonSpan*0.62+(rnd()-0.5)*0.0006, time:`syn-dump5-${i}`, Rack:(rnd()-0.5)*5, Bias:(rnd()-0.5)*5, rack:(rnd()-0.5)*5, bias:(rnd()-0.5)*5});
-    for(let i=0;i<18;i++) rows.push({fuel: 140+rnd()*120, gps: rnd()*3, rpm: 640+rnd()*60, grad: (rnd()-0.5)*3, ret:0, vs:'1', hoist:'0', weight: rnd()*4, lat:C.from.lat+latSpan*0.635+(rnd()-0.5)*0.0005, lon:C.from.lon+lonSpan*0.635+(rnd()-0.5)*0.0005, time:`syn-gap-${i}`, Rack:(rnd()-0.5)*4, Bias:(rnd()-0.5)*4, rack:(rnd()-0.5)*4, bias:(rnd()-0.5)*4});
-    for(let i=0;i<29;i++) rows.push({fuel:400+rnd()*400, gps:0.5+rnd()*1.5, rpm:680+rnd()*420, grad: (rnd()-0.5)*2, ret:0, vs:'6', hoist:'4', weight: 55+rnd()*15, lat:C.from.lat+latSpan*0.65+(rnd()-0.5)*0.0006, lon:C.from.lon+lonSpan*0.65+(rnd()-0.5)*0.0006, time:`syn-dump6-${i}`, Rack:(rnd()-0.5)*6, Bias:(rnd()-0.5)*6, rack:(rnd()-0.5)*6, bias:(rnd()-0.5)*6});
+    for(let i=0;i<24;i++) rows.push({fuel:600+rnd()*400, gps:1+rnd()*2, rpm:1650+rnd()*350, grad: (rnd()-0.5)*2, ret:0, vs:'5', hoist:'4', weight: 30+rnd()*10, lat:C.from.lat+latSpan*0.62+(rnd()-0.5)*0.0006, lon:C.from.lon+lonSpan*0.62+(rnd()-0.5)*0.0006, time:`syn-dump5-${i}`, Rack:(rnd()-0.5)*5, Bias:(rnd()-0.5)*5, rack:(rnd()-0.5)*5, bias:(rnd()-0.5)*5, dumperId: this.currentDumper || 'DMP-27'});
+    for(let i=0;i<18;i++) rows.push({fuel: 140+rnd()*120, gps: rnd()*3, rpm: 640+rnd()*60, grad: (rnd()-0.5)*3, ret:0, vs:'1', hoist:'0', weight: rnd()*4, lat:C.from.lat+latSpan*0.635+(rnd()-0.5)*0.0005, lon:C.from.lon+lonSpan*0.635+(rnd()-0.5)*0.0005, time:`syn-gap-${i}`, Rack:(rnd()-0.5)*4, Bias:(rnd()-0.5)*4, rack:(rnd()-0.5)*4, bias:(rnd()-0.5)*4, dumperId: this.currentDumper || 'DMP-27'});
+    for(let i=0;i<29;i++) rows.push({fuel:400+rnd()*400, gps:0.5+rnd()*1.5, rpm:680+rnd()*420, grad: (rnd()-0.5)*2, ret:0, vs:'6', hoist:'4', weight: 55+rnd()*15, lat:C.from.lat+latSpan*0.65+(rnd()-0.5)*0.0006, lon:C.from.lon+lonSpan*0.65+(rnd()-0.5)*0.0006, time:`syn-dump6-${i}`, Rack:(rnd()-0.5)*6, Bias:(rnd()-0.5)*6, rack:(rnd()-0.5)*6, bias:(rnd()-0.5)*6, dumperId: this.currentDumper || 'DMP-27'});
     return rows;
   },
 
