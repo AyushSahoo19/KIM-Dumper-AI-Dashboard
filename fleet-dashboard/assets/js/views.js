@@ -1185,10 +1185,67 @@ window.VIEWS = {
       const _effRows = _rows.length ? _rows : this._syntheticAugustRows();
       this.renderGkUndulation(_effRows);
     }catch(e){ console.warn('renderGkUndulation failed', e); }
+
+    // ── Retarder overlay on Leaflet map ──
+    if(!window._gkLayers.retarder) window._gkLayers.retarder = [];
+    const retBtn = document.getElementById('gk-retarder-toggle');
+    const retLegend = document.getElementById('gk-retarder-legend');
+    const retCount = document.getElementById('gk-retarder-count');
+
+    const _clearRetarderMarkers = () => {
+      window._gkLayers.retarder.forEach(m => map.removeLayer(m));
+      window._gkLayers.retarder = [];
+    };
+
+    const _drawRetarderMarkers = () => {
+      _clearRetarderMarkers();
+      const _rows2 = this._getAnalyticsRows(this.currentDate, this.currentDumper);
+      const _eff2 = _rows2.length ? _rows2 : this._syntheticAugustRows();
+      const retPts = _eff2.filter(r => (r.ret ?? 0) > 0 && r.lat != null && r.lon != null && isFinite(r.lat) && isFinite(r.lon));
+      let downhill=0, uphill=0, flat=0;
+      retPts.forEach(r => {
+        const g = r.grad ?? 0;
+        let color, label;
+        if(g < -1)      { color='#10b981'; label='Downhill'; downhill++; }
+        else if(g > 1)  { color='#ef4444'; label='Uphill'; uphill++; }
+        else            { color='#f59e0b'; label='Flat'; flat++; }
+        const radius = Math.max(5, Math.min(16, (r.ret ?? 10) / 4));
+        const m = L.circleMarker([r.lat, r.lon], {
+          radius, color, fillColor: color, fillOpacity: 0.82, weight: 1.5, opacity: 0.95
+        });
+        m.bindPopup(`<b>🛑 Retarder</b><br>Pos: <b>${(r.ret??0).toFixed(1)}%</b><br>Gradient: <b style="color:${color}">${g.toFixed(1)}°</b> — ${label}<br><span style="font-size:11px;color:#94a3b8">${r.time||''} · ${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}</span>`);
+        m.addTo(map);
+        window._gkLayers.retarder.push(m);
+      });
+      if(retCount) retCount.textContent = `${retPts.length} retarder pts · 🟢 ${downhill} downhill · 🔴 ${uphill} uphill · 🟠 ${flat} flat`;
+    };
+
+    if(retBtn && !retBtn._bound){
+      retBtn._bound = true;
+      retBtn.addEventListener('click', () => {
+        const active = retBtn.dataset.active === '1';
+        if(active){
+          _clearRetarderMarkers();
+          retBtn.dataset.active = '0';
+          retBtn.style.background = '#7c3aed';
+          retBtn.style.borderColor = '#7c3aed';
+          retBtn.textContent = '🛑 Show Retarder Usage';
+          if(retLegend) retLegend.style.display = 'none';
+        } else {
+          _drawRetarderMarkers();
+          retBtn.dataset.active = '1';
+          retBtn.style.background = '#4c1d95';
+          retBtn.style.borderColor = '#4c1d95';
+          retBtn.textContent = '🛑 Hide Retarder Usage';
+          if(retLegend) retLegend.style.display = 'flex';
+        }
+      });
+    }
+
     // bind controls once
     if(!this._gkBound){
       this._gkBound=true;
-      if(basemapSel) basemapSel.addEventListener('change', ()=> {
+      if(basemapSel) basemapSel.addEventListener('change', ()=>{
         const b = basemapSel.value || 'satellite';
         const tu = {
           roadmap: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
@@ -1207,6 +1264,7 @@ window.VIEWS = {
       if(loadBtn) loadBtn.addEventListener('click', ()=> this.renderGradientKml());
     }
   },
+
 
   renderGkUndulation(rows){
     const canvas = document.getElementById('gk-und-canvas');
