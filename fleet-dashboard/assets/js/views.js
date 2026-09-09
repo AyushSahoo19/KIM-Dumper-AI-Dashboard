@@ -2629,13 +2629,23 @@ window.VIEWS = {
   },
 
   // ── Fuel vs Speed scatter-plot helpers ─────────────────────────────────
-  _scatterWeightColor(weight, minW, maxW){
-    const t = Math.max(0, Math.min(1, (weight-minW)/(maxW-minW||1)));
-    // yellow → orange → red-pink gradient matching the reference image
-    const r = Math.round(255 - 40*t);
-    const g = Math.round(240 - 190*t);
-    const b = Math.round(120 + 80*t);
-    return `rgb(${r},${g},${b})`;
+  _scatterWeightColor(t){
+    // cream (0) → salmon-pink (0.5) → dark red (1.0) — matches reference image
+    t = Math.max(0, Math.min(1, t));
+    const stops = [
+      { p:0,    r:255, g:250, b:205 },  // light cream / lemon chiffon
+      { p:0.15, r:255, g:235, b:180 },  // warm cream
+      { p:0.35, r:250, g:180, b:150 },  // salmon
+      { p:0.55, r:230, g:120, b:120 },  // soft red
+      { p:0.75, r:200, g:70,  b:90  },  // deep rose
+      { p:1,    r:150, g:40,  b:70  }   // dark red / crimson
+    ];
+    let lo = stops[0], hi = stops[stops.length-1];
+    for(let i = 0; i < stops.length-1; i++){
+      if(t >= stops[i].p && t <= stops[i+1].p){ lo = stops[i]; hi = stops[i+1]; break; }
+    }
+    const f = (t - lo.p)/(hi.p - lo.p || 1);
+    return `rgb(${Math.round(lo.r+(hi.r-lo.r)*f)},${Math.round(lo.g+(hi.g-lo.g)*f)},${Math.round(lo.b+(hi.b-lo.b)*f)})`;
   },
   _renderScatterPlot(rows, mode){
     const canvas = document.getElementById('gm-scatter');
@@ -2647,50 +2657,61 @@ window.VIEWS = {
 
     const ctx = canvas.getContext('2d');
     const W = canvas.width, H = canvas.height;
-    const PAD = { top:44, right:20, bottom:52, left:68 };
+    const PAD = { top:46, right:24, bottom:56, left:72 };
     const gW = W - PAD.left - PAD.right;
     const gH = H - PAD.top - PAD.bottom;
     ctx.clearRect(0, 0, W, H);
 
-    // axes: X = speed, Y = fuel rate
-    const speedVals = rows.map(r => r.gps||0);
-    const fuelVals = rows.map(r => (r.fuel||0)/10);
-    const maxSpeed = Math.max(35, Math.ceil(Math.max(...speedVals)/500)*500);
-    const maxFuel  = Math.max(2000, Math.ceil(Math.max(...fuelVals)/500)*500);
+    // raw values
+    const speedRaw = rows.map(r => r.gps || 0);        // km/h
+    const fuelRaw  = rows.map(r => (r.fuel || 0) / 10); // L/h
 
-    // weight: derive from fuel rate as proxy for load (higher fuel ≈ heavier load)
-    // scale: 0–120 ton range
-    const weightVals = fuelVals.map(f => Math.min(120, (f/maxFuel)*120));
+    // display scale: speed × 10 (matching reference "km/h x10"), fuel 0–2000
+    const speedDisplay = speedRaw.map(s => s * 10);  // 0–3500
+    const maxSpeedX = 3500;
+    const maxFuelY  = 2000;
+
+    // weight proxy: derive from fuel intensity → 0–120 ton
+    // heavier loads burn more fuel at same speed
+    const weightVals = rows.map((r, i) => {
+      const spd = speedRaw[i];
+      const ful = fuelRaw[i];
+      // load estimate: fuel rate adjusted for speed (low speed + high fuel = heavy load)
+      const loadFactor = spd > 0 ? (ful / spd) : 0;
+      return Math.min(120, Math.max(0, loadFactor * 18));
+    });
     const minW = 0, maxW = 120;
 
-    // draw grid
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    // ── grid lines ──
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
     ctx.lineWidth = 1;
-    for(let i = 0; i <= 8; i++){
-      const y = PAD.top + (i/8)*gH;
+    // horizontal grid: 0, 500, 1000, 1500, 2000
+    for(let v = 0; v <= maxFuelY; v += 500){
+      const y = PAD.top + gH - (v/maxFuelY)*gH;
       ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left+gW, y); ctx.stroke();
     }
-    for(let i = 0; i <= 7; i++){
-      const x = PAD.left + (i/7)*gW;
+    // vertical grid: 0, 500, 1000, 1500, 2000, 2500, 3000, 3500
+    for(let v = 0; v <= maxSpeedX; v += 500){
+      const x = PAD.left + (v/maxSpeedX)*gW;
       ctx.beginPath(); ctx.moveTo(x, PAD.top); ctx.lineTo(x, PAD.top+gH); ctx.stroke();
     }
 
-    // plot points
+    // ── plot points ──
     const pts = [];
     for(let i = 0; i < rows.length; i++){
-      const spd = speedVals[i];
-      const ful = fuelVals[i];
-      const w = weightVals[i];
-      const x = PAD.left + (spd/maxSpeed)*gW;
-      const y = PAD.top + gH - (ful/maxFuel)*gH;
-      const col = this._scatterWeightColor(w, minW, maxW);
-      pts.push({ x, y, spd, ful, w, col, row: rows[i] });
+      const sx = Math.min(maxSpeedX, speedDisplay[i]);
+      const fy = Math.min(maxFuelY, fuelRaw[i]);
+      const w  = weightVals[i];
+      const x = PAD.left + (sx/maxSpeedX)*gW;
+      const y = PAD.top + gH - (fy/maxFuelY)*gH;
+      const col = this._scatterWeightColor((w - minW)/(maxW - minW));
+      pts.push({ x, y, spd: speedRaw[i], ful: fy, w, col, row: rows[i] });
     }
 
-    // draw points (smaller radius for large datasets)
-    const radius = rows.length > 500 ? 2.5 : rows.length > 200 ? 3 : 3.5;
+    // draw points — semi-transparent circles
+    const radius = rows.length > 800 ? 2.2 : rows.length > 400 ? 2.6 : 3;
     for(const p of pts){
-      ctx.globalAlpha = 0.7;
+      ctx.globalAlpha = 0.65;
       ctx.fillStyle = p.col;
       ctx.beginPath();
       ctx.arc(p.x, p.y, radius, 0, Math.PI*2);
@@ -2698,67 +2719,77 @@ window.VIEWS = {
     }
     ctx.globalAlpha = 1;
 
-    // axis labels
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = '12px Inter, sans-serif';
+    // ── X-axis ticks ──
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '11px Inter, sans-serif';
     ctx.textAlign = 'center';
-    for(let i = 0; i <= 7; i++){
-      const v = Math.round((i/7)*maxSpeed);
-      const x = PAD.left + (i/7)*gW;
-      ctx.fillText(v, x, H - PAD.bottom + 20);
+    for(let v = 0; v <= maxSpeedX; v += 500){
+      const x = PAD.left + (v/maxSpeedX)*gW;
+      ctx.fillText(v, x, H - PAD.bottom + 18);
     }
-    ctx.fillText('Vehicle Speed (km/h)', PAD.left + gW/2, H - 10);
+    ctx.font = '12px Inter, sans-serif';
+    ctx.fillText('Vehicle Speed (km/h x10)', PAD.left + gW/2, H - 12);
 
+    // ── Y-axis ticks ──
     ctx.textAlign = 'right';
-    for(let i = 0; i <= 8; i++){
-      const v = Math.round((i/8)*maxFuel);
-      const y = PAD.top + gH - (i/8)*gH;
-      ctx.fillText(v, PAD.left - 8, y + 4);
+    ctx.font = '11px Inter, sans-serif';
+    for(let v = 0; v <= maxFuelY; v += 500){
+      const y = PAD.top + gH - (v/maxFuelY)*gH;
+      ctx.fillText(v, PAD.left - 10, y + 4);
     }
     ctx.save();
-    ctx.translate(16, PAD.top + gH/2);
+    ctx.translate(18, PAD.top + gH/2);
     ctx.rotate(-Math.PI/2);
     ctx.textAlign = 'center';
+    ctx.font = '12px Inter, sans-serif';
     ctx.fillText('Fuel Rate (L/h)', 0, 0);
     ctx.restore();
 
-    // title
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    // ── title ──
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
     ctx.font = 'bold 14px Inter, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Fuel Rate vs Speed (coloured by load)', PAD.left + gW/2, 22);
+    ctx.fillText('Fuel Rate vs Speed (colored by load)', PAD.left + gW/2, 24);
 
-    // mode tag
+    // ── mode tag ──
     if(tag){
       tag.textContent = mode==='speed' ? 'Colour by Speed' : 'Colour by Fuel';
       tag.style.background = mode==='speed' ? 'rgba(56,189,248,0.18)' : 'rgba(245,158,11,0.18)';
       tag.style.color = mode==='speed' ? '#38bdf8' : '#f59e0b';
     }
 
-    // draw colorbar
+    // ── vertical colorbar ──
     if(colorbar){
       const cCtx = colorbar.getContext('2d');
       const cW = colorbar.width, cH = colorbar.height;
       cCtx.clearRect(0, 0, cW, cH);
       for(let i = 0; i < cH; i++){
         const t = 1 - i/cH;
-        cCtx.fillStyle = this._scatterWeightColor(t*maxW, minW, maxW);
+        cCtx.fillStyle = this._scatterWeightColor(t);
         cCtx.fillRect(0, i, cW, 1);
+      }
+      // tick labels on colorbar
+      cCtx.fillStyle = 'rgba(255,255,255,0.5)';
+      cCtx.font = '9px Inter, sans-serif';
+      cCtx.textAlign = 'center';
+      for(let v = 0; v <= 120; v += 30){
+        const y = cH - (v/120)*cH;
+        cCtx.fillText(v, cW/2, y + 3);
       }
     }
 
-    // stats
-    const avgFuel = fuelVals.reduce((a,b)=>a+b,0)/fuelVals.length;
-    const avgSpeed = speedVals.reduce((a,b)=>a+b,0)/speedVals.length;
-    if(stats) stats.innerHTML = `<b>${rows.length.toLocaleString()}</b> points · avg fuel <b>${avgFuel.toFixed(1)} L/h</b> · avg speed <b>${avgSpeed.toFixed(1)} km/h</b>`;
+    // ── stats ──
+    const avgFuel = fuelRaw.reduce((a,b)=>a+b,0)/fuelRaw.length;
+    const avgSpd  = speedRaw.reduce((a,b)=>a+b,0)/speedRaw.length;
+    if(stats) stats.innerHTML = `<b>${rows.length.toLocaleString()}</b> points · avg fuel <b>${avgFuel.toFixed(1)} L/h</b> · avg speed <b>${avgSpd.toFixed(1)} km/h</b>`;
 
-    // tooltip
+    // ── tooltip ──
     if(tip){
       canvas.onmousemove = (ev)=>{
         const rect = canvas.getBoundingClientRect();
         const mx = (ev.clientX - rect.left)*(W/rect.width);
         const my = (ev.clientY - rect.top)*(H/rect.height);
-        let best = null, bestD = 10;
+        let best = null, bestD = 12;
         for(const p of pts){
           const d = Math.hypot(p.x-mx, p.y-my);
           if(d < bestD){ bestD = d; best = p; }
@@ -2768,7 +2799,7 @@ window.VIEWS = {
           const wrapRect = canvas.parentElement.getBoundingClientRect();
           tip.style.left = (ev.clientX - wrapRect.left + 14) + 'px';
           tip.style.top = (ev.clientY - wrapRect.top - 8) + 'px';
-          tip.innerHTML = `<b>Speed: ${best.spd.toFixed(1)} km/h</b><br>Fuel: ${best.ful.toFixed(1)} L/h<br>Load: ${best.w.toFixed(0)} ton<br><span style="color:#64748b">${best.row.time||''}</span>`;
+          tip.innerHTML = `<b>Speed: ${best.spd.toFixed(1)} km/h</b><br>Fuel Rate: ${best.ful.toFixed(1)} L/h<br>Load: ${best.w.toFixed(0)} ton<br><span style="color:#64748b">${best.row.time||''}</span>`;
         } else {
           tip.style.display = 'none';
         }
