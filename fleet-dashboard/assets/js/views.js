@@ -543,7 +543,7 @@ window.VIEWS = {
     }
     const map = window._gmap;
     // tile layer switch
-    const base = (baseSel && baseSel.value) || 'roadmap';
+    const base = (baseSel && baseSel.value) || 'satellite';
     const tileUrls = {
       roadmap: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
       satellite: 'https://mt0.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
