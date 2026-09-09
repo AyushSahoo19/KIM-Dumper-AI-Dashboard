@@ -1231,43 +1231,78 @@ window.VIEWS = {
       // update legend count
       if(retCount) retCount.textContent = `${retPts.length} retarder pts · 🟢 ${downhill} downhill · 🔴 ${uphill} uphill · 🟠 ${flat} flat`;
 
-      // populate table
-      if(retTableEl) {
-        if(!annotated.length) {
-          retTableEl.innerHTML = '<tr><td colspan="6" style="color:var(--text-muted); padding:16px; text-align:center">No retarder usage points found in telemetry.</td></tr>';
-        } else {
-          retTableEl.innerHTML =
-            `<tr>
-              <th>#</th>
-              <th>Time</th>
-              <th>Lat</th>
-              <th>Lon</th>
-              <th>Retarder %</th>
-              <th>Gradient</th>
-              <th>Terrain</th>
-            </tr>` +
-            annotated.map(({ r, g, color, label, rowBg }, i) => `
-              <tr style="background:${rowBg}">
-                <td>${i+1}</td>
-                <td style="font-size:11px; white-space:nowrap">${r.time||'—'}</td>
-                <td>${r.lat.toFixed(5)}</td>
-                <td>${r.lon.toFixed(5)}</td>
-                <td><b style="color:${color}">${(r.ret??0).toFixed(1)}%</b></td>
-                <td><b style="color:${color}">${g.toFixed(1)}°</b></td>
-                <td style="color:${color}; font-weight:600">${label}</td>
-              </tr>`).join('');
-        }
-      }
+      // split into three groups
+      const downhillPts = annotated.filter(a => a.g < -1);
+      const uphillPts   = annotated.filter(a => a.g > 1);
+      const flatPts     = annotated.filter(a => a.g >= -1 && a.g <= 1);
 
-      // update table stats
+      const _rowHtml = (color) => (a, i) => `
+        <tr>
+          <td>${i+1}</td>
+          <td style="font-size:11px; white-space:nowrap">${a.r.time||'—'}</td>
+          <td>${a.r.lat.toFixed(5)}</td>
+          <td>${a.r.lon.toFixed(5)}</td>
+          <td><b style="color:${color}">${(a.r.ret??0).toFixed(1)}%</b></td>
+          <td><b style="color:${color}">${a.g.toFixed(1)}°</b></td>
+        </tr>`;
+
+      const _thead = `<tr><th>#</th><th>Time</th><th>Lat</th><th>Lon</th><th>Retarder %</th><th>Gradient</th></tr>`;
+      const _empty = (msg) => `<tr><td colspan="6" style="color:var(--text-muted); padding:12px; text-align:center; font-size:12px;">${msg}</td></tr>`;
+
+      const dhEl = document.getElementById('gk-ret-downhill-table');
+      const uhEl = document.getElementById('gk-ret-uphill-table');
+      const flEl = document.getElementById('gk-ret-flat-table');
+      const dhSt = document.getElementById('gk-ret-downhill-stats');
+      const uhSt = document.getElementById('gk-ret-uphill-stats');
+      const flSt = document.getElementById('gk-ret-flat-stats');
+
+      if(dhEl) dhEl.innerHTML = downhillPts.length ? _thead + downhillPts.map(_rowHtml('#10b981')).join('') : _empty('No downhill retarder usage.');
+      if(uhEl) uhEl.innerHTML = uphillPts.length   ? _thead + uphillPts.map(_rowHtml('#ef4444')).join('')   : _empty('No uphill retarder usage.');
+      if(flEl) flEl.innerHTML = flatPts.length     ? _thead + flatPts.map(_rowHtml('#f59e0b')).join('')     : _empty('No flat terrain retarder usage.');
+      if(dhSt) dhSt.textContent = `${downhillPts.length} points`;
+      if(uhSt) uhSt.textContent = `${uphillPts.length} points`;
+      if(flSt) flSt.textContent = `${flatPts.length} points`;
+
+      // update global stats
       if(retTableStats) {
         retTableStats.innerHTML =
-          `<b>${retPts.length}</b> total retarder events<br>` +
-          `<span style="color:#10b981">🟢 ${downhill} downhill (correct)</span> &nbsp;` +
-          `<span style="color:#ef4444">🔴 ${uphill} uphill (wasted)</span> &nbsp;` +
+          `<b>${retPts.length}</b> total retarder events &nbsp;·&nbsp; ` +
+          `<span style="color:#10b981">🟢 ${downhill} downhill (correct)</span> &nbsp; ` +
+          `<span style="color:#ef4444">🔴 ${uphill} uphill (wasted)</span> &nbsp; ` +
           `<span style="color:#f59e0b">🟠 ${flat} flat</span>`;
       }
     };
+
+    // auto-populate the three tables on load without needing the toggle button
+    (()=>{
+      const _rows3 = this._getAnalyticsRows(this.currentDate, this.currentDumper);
+      const _eff3 = _rows3.length ? _rows3 : this._syntheticAugustRows();
+      const retPts3 = _eff3.filter(r => (r.ret ?? 0) > 0 && r.lat != null && r.lon != null && isFinite(r.lat) && isFinite(r.lon));
+      let d3=0, u3=0, f3=0;
+      const ann3 = retPts3.map(r => {
+        const g = r.grad ?? 0;
+        let color;
+        if(g < -1) { color='#10b981'; d3++; } else if(g > 1) { color='#ef4444'; u3++; } else { color='#f59e0b'; f3++; }
+        return { r, g, color };
+      });
+      const dh3  = ann3.filter(a => a.g < -1), uh3 = ann3.filter(a => a.g > 1), fl3 = ann3.filter(a => a.g >= -1 && a.g <= 1);
+      const _r3  = (col) => (a, i) => `<tr><td>${i+1}</td><td style="font-size:11px;white-space:nowrap">${a.r.time||'—'}</td><td>${a.r.lat.toFixed(5)}</td><td>${a.r.lon.toFixed(5)}</td><td><b style="color:${col}">${(a.r.ret??0).toFixed(1)}%</b></td><td><b style="color:${col}">${a.g.toFixed(1)}°</b></td></tr>`;
+      const _th3 = `<tr><th>#</th><th>Time</th><th>Lat</th><th>Lon</th><th>Retarder %</th><th>Gradient</th></tr>`;
+      const _em3 = (m) => `<tr><td colspan="6" style="color:var(--text-muted);padding:12px;text-align:center;font-size:12px">${m}</td></tr>`;
+      const dhEl3 = document.getElementById('gk-ret-downhill-table');
+      const uhEl3 = document.getElementById('gk-ret-uphill-table');
+      const flEl3 = document.getElementById('gk-ret-flat-table');
+      if(dhEl3) dhEl3.innerHTML = dh3.length ? _th3 + dh3.map(_r3('#10b981')).join('') : _em3('No downhill retarder usage.');
+      if(uhEl3) uhEl3.innerHTML = uh3.length ? _th3 + uh3.map(_r3('#ef4444')).join('') : _em3('No uphill retarder usage.');
+      if(flEl3) flEl3.innerHTML = fl3.length ? _th3 + fl3.map(_r3('#f59e0b')).join('') : _em3('No flat terrain retarder usage.');
+      const ds3 = document.getElementById('gk-ret-downhill-stats'); if(ds3) ds3.textContent = `${dh3.length} points`;
+      const us3 = document.getElementById('gk-ret-uphill-stats');   if(us3) us3.textContent = `${uh3.length} points`;
+      const fs3 = document.getElementById('gk-ret-flat-stats');     if(fs3) fs3.textContent = `${fl3.length} points`;
+      const st3 = document.getElementById('gk-retarder-table-stats');
+      if(st3) st3.innerHTML = `<b>${retPts3.length}</b> total retarder events &nbsp;·&nbsp; <span style="color:#10b981">🟢 ${d3} downhill</span> &nbsp; <span style="color:#ef4444">🔴 ${u3} uphill</span> &nbsp; <span style="color:#f59e0b">🟠 ${f3} flat</span>`;
+    })();
+
+
 
     if(retBtn && !retBtn._bound){
       retBtn._bound = true;
