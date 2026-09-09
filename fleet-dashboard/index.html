@@ -376,6 +376,19 @@
         <span style="display:flex; align-items:center; gap:6px"><span style="width:14px;height:14px;border-radius:50%;background:#f59e0b;display:inline-block"></span>Flat terrain</span>
         <span id="gk-retarder-count" style="margin-left:auto; font-size:11px"></span>
       </div>
+      <!-- Retarder Usage Table — shown when retarder overlay active -->
+      <div id="gk-retarder-table-card" class="card" style="display:none; margin-top:16px; padding:24px 28px;">
+        <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px;">
+          <div>
+            <h3 style="margin:0 0 4px 0">🛑 Retarder Usage — Location & Gradient Analysis</h3>
+            <p class="sub" style="margin:0">Each row is a GPS point where the retarder was active. Color indicates terrain slope type.</p>
+          </div>
+          <div id="gk-retarder-table-stats" style="font-size:12px; color:var(--text-sec); text-align:right;"></div>
+        </div>
+        <div class="table-scroll" style="max-height:360px;">
+          <table class="data-table" id="gk-retarder-data-table"></table>
+        </div>
+      </div>
       <!-- Undulation — Rack & Bias (same logic as Undulation Monitor, red only table) -->
       <div class="card" style="margin-top:20px; padding:24px 28px;">
         <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between">

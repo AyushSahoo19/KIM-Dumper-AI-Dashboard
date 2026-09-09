@@ -1191,6 +1191,9 @@ window.VIEWS = {
     const retBtn = document.getElementById('gk-retarder-toggle');
     const retLegend = document.getElementById('gk-retarder-legend');
     const retCount = document.getElementById('gk-retarder-count');
+    const retTableCard = document.getElementById('gk-retarder-table-card');
+    const retTableEl = document.getElementById('gk-retarder-data-table');
+    const retTableStats = document.getElementById('gk-retarder-table-stats');
 
     const _clearRetarderMarkers = () => {
       window._gkLayers.retarder.forEach(m => map.removeLayer(m));
@@ -1203,12 +1206,19 @@ window.VIEWS = {
       const _eff2 = _rows2.length ? _rows2 : this._syntheticAugustRows();
       const retPts = _eff2.filter(r => (r.ret ?? 0) > 0 && r.lat != null && r.lon != null && isFinite(r.lat) && isFinite(r.lon));
       let downhill=0, uphill=0, flat=0;
-      retPts.forEach(r => {
+
+      // annotate each point with color/label
+      const annotated = retPts.map(r => {
         const g = r.grad ?? 0;
-        let color, label;
-        if(g < -1)      { color='#10b981'; label='Downhill'; downhill++; }
-        else if(g > 1)  { color='#ef4444'; label='Uphill'; uphill++; }
-        else            { color='#f59e0b'; label='Flat'; flat++; }
+        let color, label, rowBg;
+        if(g < -1)      { color='#10b981'; label='⬇ Downhill'; rowBg='rgba(16,185,129,0.07)'; downhill++; }
+        else if(g > 1)  { color='#ef4444'; label='⬆ Uphill';   rowBg='rgba(239,68,68,0.07)'; uphill++; }
+        else            { color='#f59e0b'; label='➡ Flat';      rowBg='rgba(245,158,11,0.07)'; flat++; }
+        return { r, g, color, label, rowBg };
+      });
+
+      // draw map markers
+      annotated.forEach(({ r, g, color, label }) => {
         const radius = Math.max(5, Math.min(16, (r.ret ?? 10) / 4));
         const m = L.circleMarker([r.lat, r.lon], {
           radius, color, fillColor: color, fillOpacity: 0.82, weight: 1.5, opacity: 0.95
@@ -1217,7 +1227,46 @@ window.VIEWS = {
         m.addTo(map);
         window._gkLayers.retarder.push(m);
       });
+
+      // update legend count
       if(retCount) retCount.textContent = `${retPts.length} retarder pts · 🟢 ${downhill} downhill · 🔴 ${uphill} uphill · 🟠 ${flat} flat`;
+
+      // populate table
+      if(retTableEl) {
+        if(!annotated.length) {
+          retTableEl.innerHTML = '<tr><td colspan="6" style="color:var(--text-muted); padding:16px; text-align:center">No retarder usage points found in telemetry.</td></tr>';
+        } else {
+          retTableEl.innerHTML =
+            `<tr>
+              <th>#</th>
+              <th>Time</th>
+              <th>Lat</th>
+              <th>Lon</th>
+              <th>Retarder %</th>
+              <th>Gradient</th>
+              <th>Terrain</th>
+            </tr>` +
+            annotated.map(({ r, g, color, label, rowBg }, i) => `
+              <tr style="background:${rowBg}">
+                <td>${i+1}</td>
+                <td style="font-size:11px; white-space:nowrap">${r.time||'—'}</td>
+                <td>${r.lat.toFixed(5)}</td>
+                <td>${r.lon.toFixed(5)}</td>
+                <td><b style="color:${color}">${(r.ret??0).toFixed(1)}%</b></td>
+                <td><b style="color:${color}">${g.toFixed(1)}°</b></td>
+                <td style="color:${color}; font-weight:600">${label}</td>
+              </tr>`).join('');
+        }
+      }
+
+      // update table stats
+      if(retTableStats) {
+        retTableStats.innerHTML =
+          `<b>${retPts.length}</b> total retarder events<br>` +
+          `<span style="color:#10b981">🟢 ${downhill} downhill (correct)</span> &nbsp;` +
+          `<span style="color:#ef4444">🔴 ${uphill} uphill (wasted)</span> &nbsp;` +
+          `<span style="color:#f59e0b">🟠 ${flat} flat</span>`;
+      }
     };
 
     if(retBtn && !retBtn._bound){
@@ -1231,6 +1280,7 @@ window.VIEWS = {
           retBtn.style.borderColor = '#7c3aed';
           retBtn.textContent = '🛑 Show Retarder Usage';
           if(retLegend) retLegend.style.display = 'none';
+          if(retTableCard) retTableCard.style.display = 'none';
         } else {
           _drawRetarderMarkers();
           retBtn.dataset.active = '1';
@@ -1238,9 +1288,11 @@ window.VIEWS = {
           retBtn.style.borderColor = '#4c1d95';
           retBtn.textContent = '🛑 Hide Retarder Usage';
           if(retLegend) retLegend.style.display = 'flex';
+          if(retTableCard) retTableCard.style.display = 'block';
         }
       });
     }
+
 
     // bind controls once
     if(!this._gkBound){
