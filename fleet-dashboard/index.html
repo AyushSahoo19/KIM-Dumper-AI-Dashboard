@@ -308,12 +308,12 @@
         <div id="gm-und-tables-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:12px">
           <div id="gm-und-rack-col">
             <h4 style="font-size:12px; color:#f59e0b; margin-bottom:6px">Rack — Red ≥16.1 (abs Rack)</h4>
-            <div class="table-scroll" style="max-height:300px;"><table class="data-table" id="gm-und-rack-table"></table></div>
+            <div class="table-scroll" style="max-height:300px; overflow-x:auto; overflow-y:auto;"><table class="data-table" id="gm-und-rack-table"></table></div>
             <div id="gm-und-rack-stats" style="margin-top:8px; font-size:11px; color:var(--text-sec)"></div>
           </div>
           <div id="gm-und-bias-col">
             <h4 style="font-size:12px; color:#0ea5e9; margin-bottom:6px">Bias — Red ≥16.1 (abs Bias)</h4>
-            <div class="table-scroll" style="max-height:300px;"><table class="data-table" id="gm-und-bias-table"></table></div>
+            <div class="table-scroll" style="max-height:300px; overflow-x:auto; overflow-y:auto;"><table class="data-table" id="gm-und-bias-table"></table></div>
             <div id="gm-und-bias-stats" style="margin-top:8px; font-size:11px; color:var(--text-sec)"></div>
           </div>
         </div>
@@ -380,41 +380,41 @@
           </div>
           <div id="gk-retarder-table-stats" style="font-size:12px; color:var(--text-sec); text-align:right;"></div>
         </div>
-        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px;">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(340px, 1fr)); gap:16px; min-width:0;">
           <!-- Green: Downhill -->
-          <div style="border:1px solid rgba(16,185,129,0.25); border-radius:10px; padding:14px; background:rgba(16,185,129,0.04);">
+          <div style="border:1px solid rgba(16,185,129,0.25); border-radius:10px; padding:14px; background:rgba(16,185,129,0.04); min-width:0; overflow:hidden;">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
               <span style="width:13px;height:13px;border-radius:50%;background:#10b981;display:inline-block;flex-shrink:0;"></span>
               <h4 style="margin:0; font-size:13px; color:#10b981;">&#x2B07; Downhill &#8212; Correct Use</h4>
             </div>
             <div id="gk-ret-downhill-stats" style="font-size:11px; color:var(--text-sec); margin-bottom:8px;"></div>
-            <div class="table-scroll" style="max-height:300px;">
+            <div class="table-scroll" style="max-height:300px; overflow-x:auto; overflow-y:auto;">
               <table class="data-table" id="gk-ret-downhill-table">
                 <tr><td style="color:var(--text-muted); padding:12px; text-align:center; font-size:12px;">Load KML to populate</td></tr>
               </table>
             </div>
           </div>
           <!-- Red: Uphill -->
-          <div style="border:1px solid rgba(239,68,68,0.25); border-radius:10px; padding:14px; background:rgba(239,68,68,0.04);">
+          <div style="border:1px solid rgba(239,68,68,0.25); border-radius:10px; padding:14px; background:rgba(239,68,68,0.04); min-width:0; overflow:hidden;">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
               <span style="width:13px;height:13px;border-radius:50%;background:#ef4444;display:inline-block;flex-shrink:0;"></span>
               <h4 style="margin:0; font-size:13px; color:#ef4444;">&#x2B06; Uphill &#8212; Incorrect / Wasted</h4>
             </div>
             <div id="gk-ret-uphill-stats" style="font-size:11px; color:var(--text-sec); margin-bottom:8px;"></div>
-            <div class="table-scroll" style="max-height:300px;">
+            <div class="table-scroll" style="max-height:300px; overflow-x:auto; overflow-y:auto;">
               <table class="data-table" id="gk-ret-uphill-table">
                 <tr><td style="color:var(--text-muted); padding:12px; text-align:center; font-size:12px;">Load KML to populate</td></tr>
               </table>
             </div>
           </div>
           <!-- Amber: Flat -->
-          <div style="border:1px solid rgba(245,158,11,0.25); border-radius:10px; padding:14px; background:rgba(245,158,11,0.04);">
+          <div style="border:1px solid rgba(245,158,11,0.25); border-radius:10px; padding:14px; background:rgba(245,158,11,0.04); min-width:0; overflow:hidden;">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
               <span style="width:13px;height:13px;border-radius:50%;background:#f59e0b;display:inline-block;flex-shrink:0;"></span>
               <h4 style="margin:0; font-size:13px; color:#f59e0b;">&#x27A1; Flat Terrain</h4>
             </div>
             <div id="gk-ret-flat-stats" style="font-size:11px; color:var(--text-sec); margin-bottom:8px;"></div>
-            <div class="table-scroll" style="max-height:300px;">
+            <div class="table-scroll" style="max-height:300px; overflow-x:auto; overflow-y:auto;">
               <table class="data-table" id="gk-ret-flat-table">
                 <tr><td style="color:var(--text-muted); padding:12px; text-align:center; font-size:12px;">Load KML to populate</td></tr>
               </table>
@@ -461,17 +461,17 @@
         <div id="gk-und-tables-grid" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px; margin-top:12px">
           <div id="gk-und-rack-col">
             <h4 style="margin:0 0 8px 0; font-size:13px; color:var(--text)">🔴 Rack Red (≥16.1)</h4>
-            <div class="table-scroll" style="max-height:300px;"><table class="data-table" id="gk-und-rack-table"></table></div>
+            <div class="table-scroll" style="max-height:300px; overflow-x:auto; overflow-y:auto;"><table class="data-table" id="gk-und-rack-table"></table></div>
             <div id="gk-und-rack-stats" style="margin-top:8px; font-size:11px; color:var(--text-sec)"></div>
           </div>
           <div id="gk-und-bias-col">
             <h4 style="margin:0 0 8px 0; font-size:13px; color:var(--text)">🔴 Bias Red (≥16.1)</h4>
-            <div class="table-scroll" style="max-height:300px;"><table class="data-table" id="gk-und-bias-table"></table></div>
+            <div class="table-scroll" style="max-height:300px; overflow-x:auto; overflow-y:auto;"><table class="data-table" id="gk-und-bias-table"></table></div>
             <div id="gk-und-bias-stats" style="margin-top:8px; font-size:11px; color:var(--text-sec)"></div>
           </div>
           <div id="gk-und-retarder-col" style="display:none">
             <h4 style="margin:0 0 8px 0; font-size:13px; color:var(--text)">🛑 Retarder Usage & Gradient</h4>
-            <div class="table-scroll" style="max-height:300px;"><table class="data-table" id="gk-und-retarder-table"></table></div>
+            <div class="table-scroll" style="max-height:300px; overflow-x:auto; overflow-y:auto;"><table class="data-table" id="gk-und-retarder-table"></table></div>
             <div id="gk-und-retarder-stats" style="margin-top:8px; font-size:11px; color:var(--text-sec)"></div>
           </div>
         </div>
