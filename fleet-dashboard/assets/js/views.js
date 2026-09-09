@@ -1155,10 +1155,8 @@ window.VIEWS = {
     }).filter(p=> isFinite(p.intensity) && p.lat!=null && p.lon!=null && isFinite(p.lat) && isFinite(p.lon));
     // apply filter for red only
     let pts = ptsAll;
-    if(filterVal==='rackRed') pts = ptsAll.filter(p=> Math.abs(p.rack) >= 16.1);
-    else if(filterVal==='biasRed') pts = ptsAll.filter(p=> Math.abs(p.bias) >= 16.1);
-    else if(filterVal==='rack') pts = ptsAll.filter(p=> Math.abs(p.rack) >= 12.0);
-    else if(filterVal==='bias') pts = ptsAll.filter(p=> Math.abs(p.bias) >= 12.0);
+    if(filterVal==='rackRed' || filterVal==='rack') pts = ptsAll.filter(p=> Math.abs(p.rack) >= 16.1);
+    else if(filterVal==='biasRed' || filterVal==='bias') pts = ptsAll.filter(p=> Math.abs(p.bias) >= 16.1);
     if(!pts.length){
       if(emptyEl){ emptyEl.style.display='flex'; emptyEl.textContent='No undulation GPS points.'; }
       if(tableEl) tableEl.innerHTML='';
