@@ -552,9 +552,12 @@ window.VIEWS = {
     };
     const tileInfo = document.getElementById('gm-tile-info');
     if(tileInfo) tileInfo.textContent = base + ' — ' + (tileUrls[base]||tileUrls.roadmap);
-    if(window._gmapLayers.tile) map.removeLayer(window._gmapLayers.tile);
-    window._gmapLayers.tile = L.tileLayer(tileUrls[base] || tileUrls.roadmap, { maxZoom:20, subdomains:['mt0','mt1','mt2','mt3'], attribution:'© Google &bull; HaulPro' });
-    window._gmapLayers.tile.addTo(map);
+    if(window._gmapLayers.tile) {
+      window._gmapLayers.tile.setUrl(tileUrls[base] || tileUrls.roadmap);
+    } else {
+      window._gmapLayers.tile = L.tileLayer(tileUrls[base] || tileUrls.roadmap, { maxZoom:20, subdomains:['mt0','mt1','mt2','mt3'], attribution:'© Google &bull; HaulPro' });
+      window._gmapLayers.tile.addTo(map);
+    }
     // clear old
     window._gmapLayers.segments.forEach(l=> map.removeLayer(l)); window._gmapLayers.segments=[];
     window._gmapLayers.markers.forEach(m=> map.removeLayer(m)); window._gmapLayers.markers=[];
@@ -801,13 +804,14 @@ window.VIEWS = {
             }).join('');
         }
       }
-      if(undTableStats) undTableStats.textContent = `Red ≥16.1: ${redForTable.length} shown (top 120 by intensity) of ${undPoints.filter(r=> Math.max(Math.abs(parseFloat(r.Rack||0)),Math.abs(parseFloat(r.Bias||0)))>=16.1).length} total red / ${undPoints.length} undulation pts`;
+      if(undTableStats) undTableStats.textContent = `Red ≥16.1: ${redForTableAll.length} shown (top 120 by intensity) of ${undPoints.filter(r=> Math.max(Math.abs(parseFloat(r.Rack||0)),Math.abs(parseFloat(r.Bias||0)))>=16.1).length} total red / ${undPoints.length} undulation pts`;
     } else {
       window._gmapUndStats = {total:0, red:0, green:0};
       const undTableCard2 = document.getElementById('gm-und-table-card');
       if(undTableCard2) undTableCard2.style.display = 'none';
     }
     // start/end + hotspots — EXCLUSIVE: hide in undulation view (only red undulation + path)
+    let hotspots = [];
     if(!isUndMode){
       const start = valid[0], end = valid[valid.length-1];
       if(start && end){
@@ -817,13 +821,15 @@ window.VIEWS = {
         const mE = L.marker([end.lat,end.lon], {icon:eM}).bindPopup(`End<br>${end.lat.toFixed(5)},${end.lon.toFixed(5)}<br>${end.time||''}`); mE.addTo(map); window._gmapLayers.markers.push(mE);
       }
       // hotspot markers for high burn >120 L/h — only in fuel/speed/dumping views
-      const hotspots = valid.filter(r=> (r.fuel||0)/10 > 120).slice(0,6);
+      hotspots = valid.filter(r=> (r.fuel||0)/10 > 120).slice(0,6);
       hotspots.forEach(r=>{
         const hm = L.circleMarker([r.lat,r.lon], { radius:9, fillColor:'#ef4444', color:'#fff', weight:2, fillOpacity:0.18 });
         hm.bindPopup(`<b style="color:#ef4444">High burn ${(r.fuel/10).toFixed(0)} L/h</b><br>Speed ${r.gps.toFixed(1)} km/h<br>${r.lat.toFixed(5)},${r.lon.toFixed(5)}<br>${r.time||''}`);
         hm.addTo(map); window._gmapLayers.markers.push(hm);
       });
     }
+    // make hotspots available for stats even when in undulation (empty)
+    window._gmapHotspots = hotspots;
     // fit bounds — for undulation, fit to red undulation points (exclusive view)
     let _fitPoints = valid;
     if(isUndMode){
@@ -876,7 +882,18 @@ window.VIEWS = {
     if(!this._gmapBound){
       this._gmapBound=true;
       if(modeSel) modeSel.addEventListener('change', ()=> this.renderGmap());
-      if(baseSel) baseSel.addEventListener('change', ()=> this.renderGmap());
+      if(baseSel) baseSel.addEventListener('change', ()=> {
+        const b = baseSel.value || 'roadmap';
+        const tu = {
+          roadmap: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+          satellite: 'https://mt0.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+          hybrid: 'https://mt0.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+          terrain: 'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}'
+        };
+        const tileInfo = document.getElementById('gm-tile-info');
+        if(tileInfo) tileInfo.textContent = b + ' — ' + (tu[b]||tu.roadmap);
+        if(window._gmapLayers.tile) window._gmapLayers.tile.setUrl(tu[b]||tu.roadmap);
+      });
       if(heatChk) heatChk.addEventListener('change', ()=> this.renderGmap());
       const undChk2 = document.getElementById('gm-und');
       if(undChk2 && !undChk2._bound){ undChk2._bound=true; undChk2.addEventListener('change', ()=> this.renderGmap()); }
@@ -1009,8 +1026,11 @@ window.VIEWS = {
       hybrid: 'https://mt0.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
       terrain: 'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}'
     };
-    if(window._gkLayers.tile) map.removeLayer(window._gkLayers.tile);
-    window._gkLayers.tile = L.tileLayer(tileUrls[base] || tileUrls.satellite, { maxZoom:20, subdomains:['mt0','mt1','mt2','mt3'], attribution:'© Google' }).addTo(map);
+    if(window._gkLayers.tile) {
+      window._gkLayers.tile.setUrl(tileUrls[base] || tileUrls.satellite);
+    } else {
+      window._gkLayers.tile = L.tileLayer(tileUrls[base] || tileUrls.satellite, { maxZoom:20, subdomains:['mt0','mt1','mt2','mt3'], attribution:'© Google' }).addTo(map);
+    }
     // clear previous KML
     window._gkLayers.kml.forEach(l=> map.removeLayer(l)); window._gkLayers.kml=[];
     
@@ -1121,7 +1141,16 @@ window.VIEWS = {
     // bind controls once
     if(!this._gkBound){
       this._gkBound=true;
-      if(basemapSel) basemapSel.addEventListener('change', ()=> this.renderGradientKml());
+      if(basemapSel) basemapSel.addEventListener('change', ()=> {
+        const b = basemapSel.value || 'satellite';
+        const tu = {
+          roadmap: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+          satellite: 'https://mt0.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+          hybrid: 'https://mt0.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+          terrain: 'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}'
+        };
+        if(window._gkLayers.tile) window._gkLayers.tile.setUrl(tu[b]||tu.satellite);
+      });
       if(fitBtn) fitBtn.addEventListener('click', ()=>{
         if(allCoords.length){
           const b = L.latLngBounds(allCoords);
