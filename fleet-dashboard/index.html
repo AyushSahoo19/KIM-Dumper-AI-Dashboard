@@ -284,7 +284,7 @@
     <section id="sec-gmap" class="section">
       <div class="view-controls" style="flex-wrap:wrap; gap:12px">
         <select id="gm-dumper" class="input"></select>
-                <select id="gm-mode" class="input select-sm"><option value="fuel" selected>Colour by Fuel</option><option value="speed">Colour by Speed</option><option value="dumpRpm">Dumping RPM</option><option value="dumpAbove">Dumping >700 only</option><option value="dumpBelow">Dumping ≤700 only</option><option value="und">Undulation Rack/Bias (green ≥12 / red ≥16.1)</option><option value="undRed">Undulation Red ≥16.1 only</option><option value="rack">Rack only (red ≥16.1)</option><option value="rackRed">Rack Red ≥16.1</option><option value="bias">Bias only (red ≥16.1)</option><option value="biasRed">Bias Red ≥16.1</option></select>
+                <select id="gm-mode" class="input select-sm"><option value="fuel" selected>Colour by Fuel</option><option value="speed">Colour by Speed</option><option value="dumpRpm">Dumping RPM</option><option value="dumpAbove">Dumping >700 only</option><option value="dumpBelow">Dumping ≤700 only</option><option value="rack">Rack only (red ≥16.1)</option><option value="bias">Bias only (red ≥16.1)</option></select>
         <select id="gm-basemap" class="input select-sm"><option value="roadmap" selected>Roadmap</option><option value="satellite">Satellite</option><option value="hybrid">Hybrid</option><option value="terrain">Terrain</option></select>
         <button class="btn" id="gm-fit">◎ Fit to path</button>
         <button class="btn" id="gm-play">▶ Play trace</button>
@@ -369,7 +369,7 @@
           </div>
           <div style="display:flex; gap:8px; align-items:center">
             <label style="font-size:12px; color:var(--text-sec)">Filter</label>
-            <select id="gk-und-filter" class="input select-sm"><option value="all" selected>All (Rack/Bias)</option><option value="rack">Rack only</option><option value="rackRed">Rack Red ≥16.1</option><option value="bias">Bias only</option><option value="biasRed">Bias Red ≥16.1</option></select>
+            <select id="gk-und-filter" class="input select-sm"><option value="rack" selected>Rack only (red ≥16.1)</option><option value="bias">Bias only (red ≥16.1)</option></select>
             <span id="gk-und-meta" style="font-size:12px; color:var(--text-sec)"></span>
           </div>
         </div>
