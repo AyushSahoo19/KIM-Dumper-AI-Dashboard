@@ -377,7 +377,7 @@
           </div>
           <div style="display:flex; gap:8px; align-items:center">
             <label style="font-size:12px; color:var(--text-sec)">Filter</label>
-            <select id="gk-und-filter" class="input select-sm"><option value="rack" selected>Rack only (red ≥16.1)</option><option value="bias">Bias only (red ≥16.1)</option></select>
+            <select id="gk-und-filter" class="input select-sm"><option value="rack" selected>Rack only (red ≥16.1)</option><option value="bias">Bias only (red ≥16.1)</option><option value="retarder">Retarder Usage</option></select>
             <span id="gk-und-meta" style="font-size:12px; color:var(--text-sec)"></span>
           </div>
         </div>
@@ -395,16 +395,21 @@
       <div class="card" style="margin-top:20px; padding:24px 28px;">
         <h3>Red Undulation Points — Coordinates & Value (Only Red ≥16.1) — Rack vs Bias Separate</h3>
         <p class="sub">Filtered from August 8 dump — red threshold marked red, separate tables for Rack and Bias</p>
-        <div id="gk-und-tables-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:12px">
+        <div id="gk-und-tables-grid" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px; margin-top:12px">
           <div id="gk-und-rack-col">
-            <h4 style="font-size:12px; color:#f59e0b; margin-bottom:6px">Rack — Red ≥16.1 (|Rack|)</h4>
+            <h4 style="margin:0 0 8px 0; font-size:13px; color:var(--text)">🔴 Rack Red (≥16.1)</h4>
             <div class="table-scroll" style="max-height:300px;"><table class="data-table" id="gk-und-rack-table"></table></div>
             <div id="gk-und-rack-stats" style="margin-top:8px; font-size:11px; color:var(--text-sec)"></div>
           </div>
           <div id="gk-und-bias-col">
-            <h4 style="font-size:12px; color:#0ea5e9; margin-bottom:6px">Bias — Red ≥16.1 (|Bias|)</h4>
+            <h4 style="margin:0 0 8px 0; font-size:13px; color:var(--text)">🔴 Bias Red (≥16.1)</h4>
             <div class="table-scroll" style="max-height:300px;"><table class="data-table" id="gk-und-bias-table"></table></div>
             <div id="gk-und-bias-stats" style="margin-top:8px; font-size:11px; color:var(--text-sec)"></div>
+          </div>
+          <div id="gk-und-retarder-col" style="display:none">
+            <h4 style="margin:0 0 8px 0; font-size:13px; color:var(--text)">🛑 Retarder Usage & Gradient</h4>
+            <div class="table-scroll" style="max-height:300px;"><table class="data-table" id="gk-und-retarder-table"></table></div>
+            <div id="gk-und-retarder-stats" style="margin-top:8px; font-size:11px; color:var(--text-sec)"></div>
           </div>
         </div>
         <div style="display:none"><table id="gk-und-table"></table></div>

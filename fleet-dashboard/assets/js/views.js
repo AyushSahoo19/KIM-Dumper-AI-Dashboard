@@ -1300,20 +1300,34 @@ window.VIEWS = {
     let dots = ptsAll;
     if(filterVal === 'rack') dots = ptsAll.filter(p => Math.abs(p.rack) >= 16.1);
     else if(filterVal === 'bias') dots = ptsAll.filter(p => Math.abs(p.bias) >= 16.1);
+    else if(filterVal === 'retarder') dots = ptsAll.filter(p => p.ret > 0);
 
     dots.forEach(p=>{
       const [x,y]=project(p.lat,p.lon);
-      let intensity = p.intensity;
-      if(filterVal === 'rack') intensity = Math.abs(p.rack);
-      else if(filterVal === 'bias') intensity = Math.abs(p.bias);
-      
       let col='#1e293b';
-      if(intensity >= 16.1) col='#ef4444';
-      else if(intensity >= 12.0) col='#10b981';
-      else col='rgba(51,65,85,0.55)';
-      const r = intensity >=16.1 ? 4.5 : intensity>=12.0 ? 3.5 : 2.2;
+      let r = 2.2;
+      let stroke = false;
+      
+      if (filterVal === 'retarder') {
+        r = p.ret > 20 ? 4.5 : 3.5;
+        // downhill is negative grad (green), uphill is positive grad (red)
+        if (p.grad < -1) col = '#10b981'; // Green for downhill (good)
+        else if (p.grad > 1) col = '#ef4444'; // Red for uphill (bad)
+        else col = '#f59e0b'; // Amber for flat
+        stroke = true;
+      } else {
+        let intensity = p.intensity;
+        if(filterVal === 'rack') intensity = Math.abs(p.rack);
+        else if(filterVal === 'bias') intensity = Math.abs(p.bias);
+        if(intensity >= 16.1) col='#ef4444';
+        else if(intensity >= 12.0) col='#10b981';
+        else col='rgba(51,65,85,0.55)';
+        r = intensity >=16.1 ? 4.5 : intensity>=12.0 ? 3.5 : 2.2;
+        if(intensity>=12.0) stroke = true;
+      }
+      
       ctx.fillStyle=col; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
-      if(intensity>=12.0){ ctx.strokeStyle='rgba(15,23,42,0.9)'; ctx.lineWidth=1; ctx.stroke(); }
+      if(stroke){ ctx.strokeStyle='rgba(15,23,42,0.9)'; ctx.lineWidth=1; ctx.stroke(); }
     });
     // axes
     ctx.fillStyle='#94a3b8'; ctx.font='11px Inter, system-ui, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
@@ -1332,35 +1346,48 @@ window.VIEWS = {
     const biasStatsEl = document.getElementById('gk-und-bias-stats');
     const isRackFilter = filterVal==='rack' || filterVal==='rackRed';
     const isBiasFilter = filterVal==='bias' || filterVal==='biasRed';
-    // for exclusive views, only show relevant reds; for 'all' show both
-    let rackRed, biasRed;
+    const isRetarderFilter = filterVal==='retarder';
+    
+    let rackRed = [], biasRed = [], retarderPts = [];
     if(isRackFilter){
       rackRed = pts.filter(p=> Math.abs(p.rack) >= 16.1).sort((a,b)=> Math.abs(b.rack)-Math.abs(a.rack)).slice(0,60);
-      biasRed = [];
     } else if(isBiasFilter){
       biasRed = pts.filter(p=> Math.abs(p.bias) >= 16.1).sort((a,b)=> Math.abs(b.bias)-Math.abs(a.bias)).slice(0,60);
-      rackRed = [];
+    } else if(isRetarderFilter){
+      retarderPts = ptsAll.filter(p=> p.ret > 0).sort((a,b)=> b.ret - a.ret).slice(0,100);
     } else {
       rackRed = redPts.filter(p=> Math.abs(p.rack) >= 16.1).sort((a,b)=> Math.abs(b.rack)-Math.abs(a.rack)).slice(0,60);
       biasRed = redPts.filter(p=> Math.abs(p.bias) >= 16.1).sort((a,b)=> Math.abs(b.bias)-Math.abs(a.bias)).slice(0,60);
     }
+    
     // hide/show columns based on filter
     const rackCol = document.getElementById('gk-und-rack-col');
     const biasCol = document.getElementById('gk-und-bias-col');
+    const retarderCol = document.getElementById('gk-und-retarder-col');
     const gridEl2 = document.getElementById('gk-und-tables-grid');
+    
     if(isRackFilter){
       if(rackCol) rackCol.style.display='block';
       if(biasCol) biasCol.style.display='none';
+      if(retarderCol) retarderCol.style.display='none';
       if(gridEl2) gridEl2.style.gridTemplateColumns='1fr';
     } else if(isBiasFilter){
       if(rackCol) rackCol.style.display='none';
       if(biasCol) biasCol.style.display='block';
+      if(retarderCol) retarderCol.style.display='none';
+      if(gridEl2) gridEl2.style.gridTemplateColumns='1fr';
+    } else if(isRetarderFilter){
+      if(rackCol) rackCol.style.display='none';
+      if(biasCol) biasCol.style.display='none';
+      if(retarderCol) retarderCol.style.display='block';
       if(gridEl2) gridEl2.style.gridTemplateColumns='1fr';
     } else {
       if(rackCol) rackCol.style.display='block';
       if(biasCol) biasCol.style.display='block';
+      if(retarderCol) retarderCol.style.display='none';
       if(gridEl2) gridEl2.style.gridTemplateColumns='1fr 1fr';
     }
+    
     const populateRackBiasTable = (el, arr, isRack)=>{
       if(!el) return;
       if(!arr.length){
@@ -1376,8 +1403,32 @@ window.VIEWS = {
     };
     if(rackTableEl) populateRackBiasTable(rackTableEl, rackRed, true);
     if(biasTableEl) populateRackBiasTable(biasTableEl, biasRed, false);
+    
+    const retarderTableEl = document.getElementById('gk-und-retarder-table');
+    const retarderStatsEl = document.getElementById('gk-und-retarder-stats');
+    if(retarderTableEl) {
+      if(!retarderPts.length) {
+        retarderTableEl.innerHTML='<tr><td style="color:var(--text-muted); padding:10px; text-align:center">No retarder usage recorded.</td></tr>';
+      } else {
+        retarderTableEl.innerHTML='<tr><th>#</th><th>Lat</th><th>Lon</th><th>Retarder %</th><th>Gradient</th><th>Time</th></tr>' +
+          retarderPts.map((p,i)=>{
+            const g = p.grad;
+            const gColor = g < -1 ? '#10b981' : (g > 1 ? '#ef4444' : '#f59e0b');
+            return `<tr style="background:rgba(51,65,85,0.2)">
+              <td>${i+1}</td>
+              <td>${p.lat.toFixed(5)}</td>
+              <td>${p.lon.toFixed(5)}</td>
+              <td><b>${p.ret.toFixed(1)}</b></td>
+              <td><b style="color:${gColor}">${g.toFixed(1)}°</b></td>
+              <td style="font-size:11px; white-space:nowrap">${p.time||''}</td>
+            </tr>`;
+          }).join('');
+      }
+    }
+    
     if(rackStatsEl) rackStatsEl.textContent = `Rack Red: ${rackRed.length} / ${pts.filter(p=> Math.abs(p.rack)>=12).length} und`;
     if(biasStatsEl) biasStatsEl.textContent = `Bias Red: ${biasRed.length} / ${pts.filter(p=> Math.abs(p.bias)>=12).length} und`;
+    if(retarderStatsEl) retarderStatsEl.textContent = `Retarder used in ${retarderPts.length} points (${retarderPts.filter(p=> p.grad < -1).length} downhill)`;
     // legacy single table (hidden, kept for backward compat)
     if(tableEl){
       if(!redSorted.length){
@@ -1410,7 +1461,12 @@ window.VIEWS = {
         undTip.style.display='block';
         undTip.style.left=Math.min(W-270, Math.max(8, best.x+14))+'px';
         undTip.style.top=Math.max(8, best.y-56)+'px';
-        undTip.innerHTML=`<div style="font-weight:700">${best.p.lat.toFixed(5)}, ${best.p.lon.toFixed(5)}</div><div>Rack <b>${best.p.rack.toFixed(2)}</b> · Bias <b>${best.p.bias.toFixed(2)}</b> · Intensity <b style="color:${best.p.intensity>=16.1?'#ef4444': best.p.intensity>=12.0?'#10b981':'#94a3b8'}">${best.p.intensity.toFixed(2)}</b></div><div style="color:#94a3b8; font-size:11px">${best.p.time||''} · ${best.p.intensity>=16.1?'🔴 Red ≥16.1': best.p.intensity>=12.0?'🟢 Green ≥12.0':'Normal'}</div>`;
+        if (filterVal === 'retarder') {
+          const gradStr = best.p.grad < -1 ? 'Downhill' : (best.p.grad > 1 ? 'Uphill' : 'Flat');
+          undTip.innerHTML=`<div style="font-weight:700">${best.p.lat.toFixed(5)}, ${best.p.lon.toFixed(5)}</div><div>Retarder <b>${best.p.ret.toFixed(1)}%</b> · Gradient <b style="color:${best.p.grad < -1?'#10b981':best.p.grad > 1?'#ef4444':'#f59e0b'}">${best.p.grad.toFixed(1)}°</b></div><div style="color:#94a3b8; font-size:11px">${best.p.time||''} · ${gradStr}</div>`;
+        } else {
+          undTip.innerHTML=`<div style="font-weight:700">${best.p.lat.toFixed(5)}, ${best.p.lon.toFixed(5)}</div><div>Rack <b>${best.p.rack.toFixed(2)}</b> · Bias <b>${best.p.bias.toFixed(2)}</b> · Intensity <b style="color:${best.p.intensity>=16.1?'#ef4444': best.p.intensity>=12.0?'#10b981':'#94a3b8'}">${best.p.intensity.toFixed(2)}</b></div><div style="color:#94a3b8; font-size:11px">${best.p.time||''} · ${best.p.intensity>=16.1?'🔴 Red ≥16.1': best.p.intensity>=12.0?'🟢 Green ≥12.0':'Normal'}</div>`;
+        }
       } else undTip.style.display='none';
     };
     canvas.onmouseleave=()=> undTip.style.display='none';
